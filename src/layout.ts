@@ -153,7 +153,7 @@ type Rect = { id: string; x: number; y: number; w: number; h: number };
 /**
  * Reading order of boxes as a person would read them: rows top to bottom (boxes whose vertical
  * spans overlap share a row), then columns left to right inside a row, then top to bottom.
- * It reproduces the order organize() lays things out in, so Tidy never shuffles a tidy board.
+ * It reproduces the order organize() lays things out in, so Line up never shuffles a tidy board.
  */
 export function readingOrder(rects: Rect[]): string[] {
   const byY = [...rects].sort((a, b) => a.y - b.y || a.x - b.x);

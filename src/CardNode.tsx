@@ -53,10 +53,10 @@ function CardNode({ id, data, selected }: NodeProps<CardNodeT>) {
         <button title="Smaller text (all selected cards if several)" onClick={() => bump(id, -0.15)}>A−</button>
         <button title="Reset text size" className={data.fs ? "set" : ""} onClick={() => bump(id, "reset")}>{data.fs ? `${Math.round(data.fs * 100)}%` : "Aa"}</button>
         <button title="Bigger text (all selected cards if several)" onClick={() => bump(id, 0.15)}>A+</button>
-        <button title={data.pinned ? "Unpin (Organize may move it)" : "Pin: Organize will not move this card"} className={data.pinned ? "set" : ""} onClick={() => pin(id)}>{data.pinned ? "Unpin" : "Pin"}</button>
+        <button title={data.pinned ? "Unpin (layout tools may move it)" : "Pin: layout tools will not move this card"} className={data.pinned ? "set" : ""} onClick={() => pin(id)}>{data.pinned ? "Unpin" : "Pin"}</button>
         <button title="Rewrite with AI (this card, or all selected)" onClick={() => openRewrite(id)}>✎ Rewrite</button>
       </div>
-      {data.pinned && <span className="pin-badge" title="Pinned: Organize leaves this card where it is"><Icon name="pin" size={13} /></span>}
+      {data.pinned && <span className="pin-badge" title="Pinned: layout tools leave this card where it is"><Icon name="pin" size={13} /></span>}
       <button
         className="kind nodrag"
         title="Click to change type"

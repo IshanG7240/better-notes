@@ -48,6 +48,14 @@ Inside: `boards/*.json` (one file per board, with older versions in `boards/.his
 Double-click canvas = new card · Tab = child card · Ctrl+K = AI · paste long text = brain dump ·
 Enter / Esc = accept / reject AI suggestions · Del = delete · Ctrl +/−/0 = zoom the UI.
 
+Layout tools, gentlest first:
+
+- **Space out** (Ctrl+E): only nudges apart cards and frames that overlap or sit too close; nothing else moves, frames grow to keep their cards.
+- **Line up** (Ctrl+L): lines up linked cards as a flow, fixes overlaps, fits frames to their cards; things stay roughly in place.
+- **Pack** (Ctrl+Shift+L): rearranges everything tightly in reading order (or just the selected frame).
+
+Pinned cards never move.
+
 ## Build from source
 
 Needs Node.js 22+.

@@ -127,3 +127,108 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
   }
   return { pos, size };
 }
+
+/** Gap kept around things: on the open board, and between things inside a frame. Same as tidy() so the two agree. */
+const GAP_ROOT = 56;
+const GAP_IN = 24;
+
+/**
+ * "Space out": the gentlest layout. Only things that overlap or sit closer than the gap move, and only
+ * as far as needed. Each crowded pair moves apart half each, along whichever axis needs less movement
+ * (pinned things don't move; the other side takes the whole push). Frames move as a block with
+ * everything inside them, and grow (never shrink) to keep their contents inside. Works inside-out.
+ */
+export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<string, number> = new Map()) {
+  const pm = parentMap(nodes);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const rect = new Map<string, R>();
+  for (const n of nodes) {
+    const b = boxRect(n);
+    rect.set(n.id, isCard(n) ? { x: b.x, y: b.y, w: cardW(n), h: fixedH.get(n.id) ?? fullH.get(n.id) ?? Math.max(n.measured?.height ?? 0, estHeight(n)) } : { ...b, h: fixedH.get(n.id) ?? b.h });
+  }
+  const kids = new Map<string, string[]>();
+  for (const n of nodes) {
+    const p = pm.get(n.id) ?? "";
+    kids.set(p, [...(kids.get(p) ?? []), n.id]);
+  }
+  const depth = (id: string) => { let d = 0, p = pm.get(id); while (p) { d++; p = pm.get(p); } return d; };
+  const descendants = (id: string): string[] => (kids.get(id) ?? []).flatMap((k) => [k, ...descendants(k)]);
+  const move = (id: string, dx: number, dy: number) => {
+    if (!dx && !dy) return;
+    for (const k of [id, ...(isFrame(byId.get(id)!) ? descendants(id) : [])]) {
+      const r = rect.get(k)!;
+      rect.set(k, { ...r, x: r.x + dx, y: r.y + dy });
+    }
+  };
+  const containers = ["", ...nodes.filter((n) => isFrame(n) && !n.data.collapsed).map((n) => n.id)].sort((a, b) => (b ? depth(b) + 1 : 0) - (a ? depth(a) + 1 : 0));
+
+  for (const c of containers) {
+    const items = kids.get(c) ?? [];
+    if (!items.length) continue;
+    const M = c === "" ? GAP_ROOT : GAP_IN;
+    const fixed = (id: string) => locked.has(id);
+    // how far a and b must separate on each axis to keep the gap (<= 0: they already have room)
+    const need = (a: R, b: R) => ({
+      x: Math.min(a.x + a.w + M - b.x, b.x + b.w + M - a.x),
+      y: Math.min(a.y + a.h + M - b.y, b.y + b.h + M - a.y),
+    });
+    // 1) relax: nudge each crowded pair apart, a little at a time, until nobody is crowded
+    for (let iter = 0; iter < 300; iter++) {
+      let crowded = false;
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i], b = items[j];
+          if (fixed(a) && fixed(b)) continue;
+          const ra = rect.get(a)!, rb = rect.get(b)!;
+          const n = need(ra, rb);
+          if (n.x <= 0.5 || n.y <= 0.5) continue;
+          crowded = true;
+          // push along the cheaper axis; direction from the centres (ties: the later one goes right/down)
+          const horiz = n.x <= n.y;
+          const ca = horiz ? ra.x + ra.w / 2 : ra.y + ra.h / 2, cb = horiz ? rb.x + rb.w / 2 : rb.y + rb.h / 2;
+          const sign = cb >= ca ? 1 : -1; // b goes this way, a the other
+          const d = horiz ? n.x : n.y;
+          const shareA = fixed(a) ? 0 : fixed(b) ? 1 : 0.5;
+          const da = -sign * d * shareA, db = sign * d * (1 - shareA);
+          if (horiz) { move(a, da, 0); move(b, db, 0); } else { move(a, 0, da); move(b, 0, db); }
+        }
+      }
+      if (!crowded) break;
+    }
+    // 2) safety net for knots the relaxation didn't untie: greedy push in reading order
+    const order = readingOrder(items.map((id) => ({ id, ...rect.get(id)! })));
+    const placed: string[] = items.filter(fixed);
+    for (const id of order) {
+      if (fixed(id)) continue;
+      for (let guard = 0; guard < 400; guard++) {
+        const r = rect.get(id)!;
+        const hit = placed.find((p) => { const n = need(r, rect.get(p)!); return n.x > 0.5 && n.y > 0.5; });
+        if (!hit) break;
+        const q = rect.get(hit)!;
+        const right = q.x + q.w + M - r.x, down = q.y + q.h + M - r.y;
+        if (right <= down) move(id, right, 0); else move(id, 0, down);
+      }
+      placed.push(id);
+    }
+    // 3) a frame grows (never shrinks) so everything inside keeps its place in it
+    if (c) {
+      const f = rect.get(c)!;
+      const rs = items.map((id) => rect.get(id)!);
+      const x = Math.min(f.x, ...rs.map((r) => r.x - FRAME_PAD.x)), y = Math.min(f.y, ...rs.map((r) => r.y - FRAME_PAD.top));
+      const x2 = Math.max(f.x + f.w, ...rs.map((r) => r.x + r.w + FRAME_PAD.x)), y2 = Math.max(f.y + f.h, ...rs.map((r) => r.y + r.h + FRAME_PAD.bottom));
+      rect.set(c, { x, y, w: x2 - x, h: y2 - y });
+    }
+  }
+
+  const pos = new Map<string, { x: number; y: number }>();
+  const size = new Map<string, { width: number; height: number }>();
+  for (const n of nodes) {
+    const r = rect.get(n.id)!;
+    if (Math.round(r.x) !== Math.round(n.position.x) || Math.round(r.y) !== Math.round(n.position.y)) pos.set(n.id, { x: Math.round(r.x), y: Math.round(r.y) });
+    if (isFrame(n) && !n.data.collapsed) {
+      const s = frameSize(n);
+      if (Math.round(r.w) !== Math.round(s.w) || Math.round(r.h) !== Math.round(s.h)) size.set(n.id, { width: Math.round(r.w), height: Math.round(r.h) });
+    }
+  }
+  return { pos, size };
+}

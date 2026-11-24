@@ -186,6 +186,11 @@ export default function Canvas() {
         st.addRootCard();
         return;
       }
+      if (!term && !isTyping(e.target) && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        st.organizeLayout("space");
+        return;
+      }
       if (!term && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") {
         e.preventDefault();
         if (e.shiftKey) st.compactLayout(); else st.organizeLayout();
@@ -534,8 +539,9 @@ export default function Canvas() {
           <button onClick={() => (addCard({ x: menu.fx - 130, y: menu.fy - 20 }), setMenu(null))}>＋ New card here</button>
           <button onClick={() => (addFrame({ x: menu.fx, y: menu.fy }), setMenu(null))}>▢ New group frame here</button>
           <button onClick={() => (useStore.getState().setAskAction("dump"), setMenu(null))}>🧠 Brain dump…</button>
-          <button onClick={() => (useStore.getState().organizeLayout(), setMenu(null))}>▦ Tidy (keep layout, fix overlaps)</button>
-          <button onClick={() => (useStore.getState().compactLayout(), setMenu(null))}>▤ Compact (pack in reading order)</button>
+          <button title="Only moves things that overlap or are too close; everything else stays put" onClick={() => (useStore.getState().organizeLayout("space"), setMenu(null))}>↔ Space out (fix overlaps only)</button>
+          <button title="Lines linked cards up as a flow and fits frames; things stay roughly where they are" onClick={() => (useStore.getState().organizeLayout(), setMenu(null))}>▦ Line up (flows + fit frames)</button>
+          <button title="Rearranges everything tightly in reading order" onClick={() => (useStore.getState().compactLayout(), setMenu(null))}>▤ Pack (rearrange tightly)</button>
           <button onClick={() => (useStore.setState((s) => ({ fitTick: s.fitTick + 1 })), setMenu(null))}>⤢ Fit to screen</button>
         </div>
       )}

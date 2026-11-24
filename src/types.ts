@@ -16,7 +16,7 @@ export type CardData = {
   del?: string;
   /** per-card text size multiplier (default 1) */
   fs?: number;
-  /** pinned cards keep their place when you Organize */
+  /** pinned cards keep their place when you use a layout tool */
   pinned?: boolean;
 };
 export type CardNodeT = Node<CardData, "card">;

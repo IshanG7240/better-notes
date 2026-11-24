@@ -591,3 +591,10 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none; }
 .md a.linkchip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 /* while dragging a new link, the card under the pointer lights up: dropping anywhere on it attaches */
 .linking .react-flow__node-card:hover .card { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent), var(--shadow); }
+/* rich hover hints on toolbar buttons (layout tools) */
+.hint-wrap { position: relative; display: inline-flex; }
+.hint { position: absolute; top: calc(100% + 8px); left: 0; z-index: 70; width: 290px; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); font-size: 12.5px; line-height: 1.45; color: var(--fg); white-space: normal; pointer-events: none; opacity: 0; transform: translateY(-3px); transition: opacity .12s, transform .12s; }
+.hint b { font-size: 13px; color: var(--accent); }
+.hint-keeps { color: var(--muted); }
+.hint kbd { align-self: flex-start; font: 11.5px var(--ui-font); padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); }
+.hint-wrap:hover .hint { opacity: 1; transform: none; transition-delay: .35s; }

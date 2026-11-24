@@ -72,7 +72,7 @@ export function Toasts() {
   return <div className={`toast glass${error ? " err" : ""}`} onClick={clearToast}>{error ?? note}</div>;
 }
 
-const COMMANDS: { id: AskAction | "organize" | "compact" | "frame" | "aigroup"; label: string; hint: string; icon: string }[] = [
+const COMMANDS: { id: AskAction | "space" | "organize" | "compact" | "frame" | "aigroup"; label: string; hint: string; icon: string }[] = [
   { id: "dump", label: "Brain dump → board", hint: "paste messy text, get structure", icon: "🧠" },
   { id: "expand", label: "Expand selection", hint: "add children to selected cards", icon: "🌱" },
   { id: "rewrite", label: "Rewrite selection…", hint: "reword cards with AI", icon: "✎" },
@@ -84,8 +84,9 @@ const COMMANDS: { id: AskAction | "organize" | "compact" | "frame" | "aigroup"; 
   { id: "condense", label: "AI: condense into fewer cards", hint: "assistant", icon: "⇊" },
   { id: "split", label: "AI: split cards", hint: "assistant", icon: "✂" },
   { id: "frame", label: "New empty frame", hint: "", icon: "▢＋" },
-  { id: "organize", label: "Tidy layout (keep places, fix overlaps)", hint: "Ctrl+L", icon: "▦" },
-  { id: "compact", label: "Compact layout (selected frame, else board)", hint: "Ctrl+Shift+L", icon: "▤" },
+  { id: "space", label: "Space out (fix overlaps & gaps, nothing else moves)", hint: "Ctrl+E", icon: "↔" },
+  { id: "organize", label: "Line up (linked cards as flows, fit frames)", hint: "Ctrl+L", icon: "▦" },
+  { id: "compact", label: "Pack (rearrange tightly; selected frame, else board)", hint: "Ctrl+Shift+L", icon: "▤" },
   { id: "arrange", label: "AI: arrange into sections", hint: "assistant", icon: "▦" },
   { id: "doc", label: "Board → document", hint: "PRD, docs, outline, summary…", icon: "📄" },
 ];
@@ -105,6 +106,7 @@ export function Palette() {
     const c = list[idx];
     st.setModal(null);
     if (c.id === "split" || c.id === "dump" || c.id === "doc" || c.id === "rewrite" || c.id === "expand" || c.id === "risks" || c.id === "gaps" || c.id === "connect" || c.id === "arrange" || c.id === "condense") st.setAskAction(c.id);
+    else if (c.id === "space") st.organizeLayout("space");
     else if (c.id === "organize") st.organizeLayout();
     else if (c.id === "compact") st.compactLayout();
     else if (c.id === "group") st.groupSelection();

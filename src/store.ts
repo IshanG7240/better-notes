@@ -38,7 +38,7 @@ import { aggregateEdges, collapsedOwners } from "./lines";
 import { spawnPoint } from "./spawn";
 import { CARD_W, setCardDefault, cardW, FRAME_PAD, boxRect, descendants, estHeight, frameSize, layoutNew, membersOf, organize, COLLAPSED, parentMap, readingOrder } from "./layout";
 import { fullH } from "./heights";
-import { tidy } from "./tidy";
+import { spaceOut, tidy } from "./tidy";
 import { flowEdges, isLinkType, type LinkType } from "./linktypes";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
@@ -188,8 +188,8 @@ interface State {
   addFrame(pos: { x: number; y: number }): void;
   groupSelection(): void;
   movePositions(pos: Map<string, { x: number; y: number }>): void;
-  /** gentle tidy: keep places, flow linked clusters, push overlaps apart, fit frames */
-  organizeLayout(): void;
+  /** "Line up" (default): keep places, flow linked clusters, push overlaps apart, fit frames. "space": only un-crowd, frames only grow */
+  organizeLayout(mode?: "space"): void;
   /** tight reading-order packing of the selected frame(s), else the selected cards, else the whole board */
   compactLayout(second?: boolean, only?: string[]): void;
   ghostCount(): number;
@@ -640,7 +640,7 @@ export const useStore = create<State>()((set, get) => ({
   movePositions: (pos) =>
     set((s) => ({ board: { ...s.board, nodes: s.board.nodes.map((n) => (pos.has(n.id) ? { ...n, position: pos.get(n.id)! } : n)) } })),
 
-  organizeLayout() {
+  organizeLayout(mode) {
     const { board } = get();
     const { hidden } = collapsedOwners(board.nodes);
     const visible = board.nodes.filter((n) => !hidden.has(n.id));
@@ -653,8 +653,9 @@ export const useStore = create<State>()((set, get) => ({
       while (p) { locked.add(p); p = pm.get(p); }
     }
     const blocks = visible.filter(isFrame).filter((f) => f.data.collapsed);
-    const { pos, size } = tidy(visible, flowEdges(aggregateEdges(board.nodes, board.edges)), locked, new Map(blocks.map((f) => [f.id, COLLAPSED.h])));
-    if (!pos.size && !size.size) { set({ note: "Already tidy." }); return; }
+    const fixedH = new Map(blocks.map((f) => [f.id, COLLAPSED.h]));
+    const { pos, size } = mode === "space" ? spaceOut(visible, locked, fixedH) : tidy(visible, flowEdges(aggregateEdges(board.nodes, board.edges)), locked, fixedH);
+    if (!pos.size && !size.size) { set({ note: mode === "space" ? "Everything already has room." : "Already lined up." }); return; }
     const shift = new Map<string, { dx: number; dy: number }>();
     for (const f of blocks) {
       const np = pos.get(f.id);

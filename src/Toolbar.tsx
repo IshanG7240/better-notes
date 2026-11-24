@@ -4,12 +4,27 @@ import { isCard } from "./types";
 import { shareBoard } from "./share";
 import { Icon } from "./icons";
 
-function Btn({ icon, label, onClick, disabled, tip, on }: { icon: string; label?: string; onClick: () => void; disabled?: boolean; tip?: string; on?: boolean }) {
-  return (
-    <button className={`tbtn${on ? " on" : ""}${label ? "" : " icon-only"}`} disabled={disabled} title={tip} onClick={onClick}>
+type Hint = { what: string; keeps: string; keys: string };
+
+function Btn({ icon, label, onClick, disabled, tip, on, hint }: { icon: string; label?: string; onClick: () => void; disabled?: boolean; tip?: string; on?: boolean; hint?: Hint }) {
+  const b = (
+    <button className={`tbtn${on ? " on" : ""}${label ? "" : " icon-only"}`} disabled={disabled} title={hint ? undefined : tip} onClick={onClick}>
       <Icon name={icon} />
       {label && <span>{label}</span>}
     </button>
+  );
+  if (!hint) return b;
+  // a richer hover card than a plain tooltip: what it does, what it leaves alone, the shortcut
+  return (
+    <span className="hint-wrap">
+      {b}
+      <span className="hint glass" role="tooltip">
+        <b>{label}</b>
+        <span>{hint.what}</span>
+        <span className="hint-keeps">{hint.keeps}</span>
+        <kbd>{hint.keys}</kbd>
+      </span>
+    </span>
   );
 }
 const Sep = () => <span className="tsep" />;
@@ -80,9 +95,29 @@ export default function Toolbar() {
           <Btn icon="frame" label="Frame" tip="Add an empty frame" onClick={() => st.addFrame({ x: 0, y: 0 })} />
           <Btn icon="group" label="Group" tip="Wrap the selection in a frame · Ctrl+G" disabled={!selBoxes} onClick={() => st.groupSelection()} />
           <Sep />
-          <Btn icon="organize" label="Tidy" tip="Keeps things where you put them: linked cards line up as a flow, overlaps get pushed apart, frames fit their cards · Ctrl+L (pinned cards stay put)" onClick={() => st.organizeLayout()} />
-          <Btn icon="compact" label="Compact" tip={selFrames ? "Pack the selected frame tightly in reading order · Ctrl+Shift+L" : "Pack the whole board tightly: sections side by side, cards stacked in reading order · Ctrl+Shift+L"} onClick={() => st.compactLayout()} />
-          <Btn icon="pin" label={allPinned ? "Unpin" : "Pin"} tip="Pinned cards keep their position when you Organize" disabled={!selCards.length} on={allPinned} onClick={() => st.togglePin()} />
+          <Btn
+            icon="spread"
+            label="Space out"
+            hint={{ what: "Gives every card and frame some personal space: anything overlapping or too close gets nudged apart, just enough. Frames grow to keep their cards inside.", keeps: "Nothing else moves. Pinned cards stay put. The gentlest option.", keys: "Ctrl+E" }}
+            onClick={() => st.organizeLayout("space")}
+          />
+          <Btn
+            icon="organize"
+            label="Line up"
+            hint={{ what: "Lines up cards joined by links (3 or more) into a neat flow, fixes overlaps, and resizes frames to fit their cards.", keeps: "Things stay roughly where you put them. Pinned cards stay put.", keys: "Ctrl+L" }}
+            onClick={() => st.organizeLayout()}
+          />
+          <Btn
+            icon="compact"
+            label="Pack"
+            hint={{
+              what: selFrames ? "Rearranges the selected frame tightly: its cards stacked in reading order." : "Rearranges the whole board tightly: frames side by side as sections, cards stacked in reading order.",
+              keeps: "Keeps the reading order, not the positions. Pinned cards stay put. Select a frame to pack only that.",
+              keys: "Ctrl+Shift+L",
+            }}
+            onClick={() => st.compactLayout()}
+          />
+          <Btn icon="pin" label={allPinned ? "Unpin" : "Pin"} tip="Pinned cards keep their position when you Space out, Line up or Pack" disabled={!selCards.length} on={allPinned} onClick={() => st.togglePin()} />
           <Btn icon="fit" label="Fit" tip="Fit everything on screen" onClick={() => useStore.setState((s) => ({ fitTick: s.fitTick + 1 }))} />
           <Sep />
           <Btn icon="undo" tip="Undo · Ctrl+Z" disabled={!canUndo} onClick={() => st.undo()} />

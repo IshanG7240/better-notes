@@ -40,6 +40,7 @@ const P: Record<string, ReactNode> = {
   note: <><rect x="4" y="3.5" width="12" height="13" rx="2.2" /><path d="M7 8h6M7 11.5h4" /></>,
   merge: <><path d="M5 3.5v3c0 2.2 5 2.2 5 4.5v5.5M15 3.5v3c0 2.2-5 2.2-5 4.5" /><path d="M7.5 14l2.5 2.5 2.5-2.5" /></>,
   compact: <><rect x="3.5" y="3.5" width="5.5" height="13" rx="1.2" /><rect x="11" y="3.5" width="5.5" height="7" rx="1.2" /><path d="M11 13.5h5.5M11 16.5h5.5" /></>,
+  spread: <><rect x="6.5" y="6" width="7" height="8" rx="1.4" /><path d="M4.5 10H1.5M3 8.5L1.5 10 3 11.5M15.5 10h3M17 8.5l1.5 1.5-1.5 1.5" /></>,
   chat: <path d="M4 5h12v8H9l-3.5 3v-3H4V5z" />,
 };
 
