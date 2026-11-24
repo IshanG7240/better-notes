@@ -589,3 +589,5 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none; }
 .lt-pick button.lt-risk_for.on { border-color: #e39a55; }
 .md a.linkchip { display: inline-block; max-width: 100%; vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 7px; border-radius: 6px; font-size: .92em; text-decoration: none; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 .md a.linkchip:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+/* while dragging a new link, the card under the pointer lights up: dropping anywhere on it attaches */
+.linking .react-flow__node-card:hover .card { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent), var(--shadow); }

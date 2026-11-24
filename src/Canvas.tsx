@@ -479,6 +479,18 @@ export default function Canvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectStart={() => wrap.current?.classList.add("linking")}
+        onConnectEnd={(e, cs) => {
+          wrap.current?.classList.remove("linking");
+          if (cs.isValid || !cs.fromNode) return; // landed on a connection point: onConnect already ran
+          // dropped anywhere on a card (not just on a connection point): attach to that card
+          const pt = "changedTouches" in e ? e.changedTouches[0] : e;
+          const el = document.elementFromPoint(pt.clientX, pt.clientY)?.closest<HTMLElement>(".react-flow__node");
+          const to = el?.dataset.id;
+          if (!to || to === cs.fromNode.id) return;
+          const from = cs.fromNode.id;
+          onConnect({ source: from, target: to, sourceHandle: null, targetHandle: null });
+        }}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={48}
         onNodeDragStart={dragStart}
