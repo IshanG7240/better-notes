@@ -11,7 +11,7 @@ import AskPanel from "./AskPanel";
 import { DocView, Palette, SettingsModal, Toasts, UsageChip } from "./Modals";
 import { persistBoard, useStore } from "./store";
 import { THEMES, type Theme } from "./types";
-import { toMarkdown } from "./outline";
+import { toMarkdown } from "./outlineTree";
 
 const SWATCH: Record<Theme, string> = {
   dark: "linear-gradient(135deg,#1b1f2a,#0f1115)",

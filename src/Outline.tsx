@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Icon } from "./icons";
 import { useStore } from "./store";
-import { buildTree, toMarkdown, type TreeItem } from "./outline";
+import { buildTree, toMarkdown, type TreeItem } from "./outlineTree";
 import { Notes, Title } from "./Editable";
 import { KINDS } from "./types";
 
