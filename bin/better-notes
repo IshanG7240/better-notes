@@ -1,0 +1,8 @@
+#!/bin/sh
+# Launcher for Better Notes (used by the desktop entry). Rebuilds the UI if sources changed.
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+cd "$(dirname "$(readlink -f "$0")")/.." || exit 1
+if [ ! -f dist/index.html ] || [ -n "$(find src index.html electron -newer dist/index.html -type f -print -quit 2>/dev/null)" ]; then
+  npx vite build >/tmp/better-notes-build.log 2>&1
+fi
+exec node_modules/.bin/electron . --no-sandbox --class=better-notes "$@"

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>__TITLE__</title>
+<style>
+:root{__VARS__}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--ui-font,system-ui,sans-serif);overflow:hidden;-webkit-text-size-adjust:100%}
+body{background-image:var(--bg-img,none);background-attachment:fixed}
+header{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;gap:8px;align-items:center;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:15px;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header button,header input{font:inherit;font-size:13px;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+header input{width:150px;max-width:34vw}
+header button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.ro{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+#view{position:fixed;inset:46px 0 0 0;overflow:hidden;touch-action:none;cursor:grab}
+#view.drag{cursor:grabbing}
+#world{position:absolute;left:0;top:0;transform-origin:0 0}
+.frame{position:absolute;border:2px solid var(--fc);border-radius:14px;background:color-mix(in srgb,var(--fc) 9%,transparent)}
+.frame>b{position:absolute;left:14px;top:10px;font-size:17px;color:var(--fc);white-space:nowrap}
+.card{position:absolute;background:var(--card);border:1px solid var(--line);border-left:4px solid var(--c);border-radius:12px;padding:9px 12px 11px;box-shadow:var(--shadow)}
+.card .k{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--c)}
+.card h3{margin:2px 0 4px;font-size:17px;font-weight:650;word-break:break-word}
+.card ul{margin:0;padding:0;list-style:none;font-size:14px;line-height:1.45;font-family:var(--notefont,inherit)}
+.card li{position:relative;padding-left:14px;margin:2px 0}
+.card li::before{content:"•";position:absolute;left:2px;color:var(--muted)}
+.card li.task::before{content:"☐"} .card li.task.done::before{content:"☑"} .card li.done{opacity:.6;text-decoration:line-through}
+.card li.h{font-weight:650;padding-left:0} .card li.h::before{content:""} .card li.quote{color:var(--muted);font-style:italic}
+.card li.num::before{content:attr(data-n) "."}
+code{background:var(--panel2);padding:0 4px;border-radius:4px;font-size:.92em}
+a{color:var(--accent)}
+.card.hit{outline:3px solid var(--accent);outline-offset:2px}.card.dim{opacity:.25}
+svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.elabel{position:absolute;transform:translate(-50%,-50%);font-size:11px;background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 7px;white-space:nowrap}
+#list{position:fixed;inset:46px 0 0 0;overflow:auto;padding:14px;display:none}
+#list section{max-width:720px;margin:0 auto 18px}
+#list h2{font-size:15px;color:var(--fc,var(--accent));margin:0 0 8px}
+#list .card{position:relative;margin:0 0 10px;box-shadow:none}
+body.outline #view{display:none} body.outline #list{display:block}
+footer{position:fixed;bottom:6px;right:10px;font-size:11px;color:var(--muted);z-index:5;pointer-events:none}
+</style></head>
+<body>
+<header><h1 id="t"></h1><span class="ro">read-only</span><input id="q" placeholder="Search…" type="search"><button id="mode">Outline</button><button id="fit">Fit</button></header>
+<div id="view"><div id="world"><svg id="edges"></svg></div></div>
+<div id="list"></div>
+<footer>Shared from Better Notes</footer>
+<script>
+const D=/*DATA*/null;
+const KC={idea:"var(--idea)",question:"var(--question)",risk:"var(--risk)",task:"var(--task)",note:"var(--note)"};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const TOK=/(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(~~[^~\n]+~~)|(\[[^\]\n]+\]\(https?:\/\/[^)\s]+\))|(https?:\/\/[^\s)<]+)|(\*[^*\s][^*\n]*\*)/g;
+function inl(t){let o="",l=0,m;TOK.lastIndex=0;while((m=TOK.exec(t))){o+=esc(t.slice(l,m.index));const s=m[0];
+ if(m[1])o+="<code>"+esc(s.slice(1,-1))+"</code>";else if(m[2])o+="<b>"+inl(s.slice(2,-2))+"</b>";else if(m[3])o+="<s>"+inl(s.slice(2,-2))+"</s>";
+ else if(m[4]){const x=/^\[([^\]]+)\]\(([^)]+)\)$/.exec(s);o+='<a href="'+esc(x[2])+'" target="_blank" rel="noopener">'+esc(x[1])+"</a>"}
+ else if(m[5])o+='<a href="'+esc(s)+'" target="_blank" rel="noopener">'+esc(s)+"</a>";else o+="<i>"+inl(s.slice(1,-1))+"</i>";l=m.index+s.length}
+ return o+esc(t.slice(l))}
+function md(v){return "<ul>"+v.split("\n").map(raw=>{if(!raw.trim())return"";const ind=Math.floor((raw.match(/^ */)[0].length)/2),t=raw.trim(),st=ind?' style="margin-left:'+ind*14+'px"':"";let m;
+ if(m=/^(#{1,3})\s+(.*)$/.exec(t))return'<li class="h"'+st+">"+inl(m[2])+"</li>";
+ if(m=/^[-*+]\s+\[( |x|X)\]\s+(.*)$/.exec(t))return'<li class="task'+(m[1]!==" "?" done":"")+'"'+st+">"+inl(m[2])+"</li>";
+ if(m=/^>\s?(.*)$/.exec(t))return'<li class="quote"'+st+">"+inl(m[1])+"</li>";
+ if(m=/^(\d+)[.)]\s+(.*)$/.exec(t))return'<li class="num" data-n="'+m[1]+'"'+st+">"+inl(m[2])+"</li>";
+ return"<li"+st+">"+inl(t.replace(/^[-*+]\s+/,""))+"</li>"}).join("")+"</ul>"}
+const cardHtml=n=>'<div class="k">'+esc(n.kind)+"</div><h3>"+(n.title?esc(n.title):"<i>Untitled</i>")+"</h3>"+md(n.bullets||"");
+document.getElementById("t").textContent=D.name||"Board";document.title=D.name||"Board";
+const world=document.getElementById("world"),svg=document.getElementById("edges"),view=document.getElementById("view");
+const els=new Map();
+for(const n of D.nodes){const e=document.createElement("div");e.style.left=n.x+"px";e.style.top=n.y+"px";e.style.width=n.w+"px";
+ if(n.type==="frame"){e.className="frame";e.style.height=n.h+"px";e.style.setProperty("--fc",n.color);e.innerHTML="<b>"+esc(n.title||"")+"</b>";world.insertBefore(e,svg)}
+ else{e.className="card";e.style.setProperty("--c",KC[n.kind]||KC.note);e.innerHTML=cardHtml(n);world.appendChild(e)}
+ els.set(n.id,e)}
+function drawEdges(){const NS="http://www.w3.org/2000/svg";let h='<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b8494"/></marker></defs>';
+ world.querySelectorAll(".elabel").forEach(x=>x.remove());
+ const box=id=>{const n=D.nodeById[id],e=els.get(id);return{x:n.x,y:n.y,w:n.w,h:n.type==="frame"?n.h:e.offsetHeight}};
+ for(const ed of D.edges){const a=D.nodeById[ed.s],b=D.nodeById[ed.t];if(!a||!b)continue;const A=box(ed.s),B=box(ed.t);
+  const ac={x:A.x+A.w/2,y:A.y+A.h/2},bc={x:B.x+B.w/2,y:B.y+B.h/2},dx=bc.x-ac.x,dy=bc.y-ac.y;let p,q,c1,c2;
+  if(Math.abs(dx)*A.h>Math.abs(dy)*A.w){const s=dx>0?1:-1;p={x:A.x+(s>0?A.w:0),y:ac.y};q={x:B.x+(s>0?0:B.w),y:bc.y};const k=Math.max(40,Math.abs(q.x-p.x)/2);c1={x:p.x+s*k,y:p.y};c2={x:q.x-s*k,y:q.y}}
+  else{const s=dy>0?1:-1;p={x:ac.x,y:A.y+(s>0?A.h:0)};q={x:bc.x,y:B.y+(s>0?0:B.h)};const k=Math.max(40,Math.abs(q.y-p.y)/2);c1={x:p.x,y:p.y+s*k};c2={x:q.x,y:q.y-s*k}}
+  h+='<path d="M'+p.x+" "+p.y+" C"+c1.x+" "+c1.y+" "+c2.x+" "+c2.y+" "+q.x+" "+q.y+'" fill="none" stroke="#7b8494" stroke-width="1.6" opacity=".75" marker-end="url(#ar)"/>';
+  if(ed.label){const l=document.createElement("div");l.className="elabel";l.textContent=ed.label;l.style.left=(p.x+q.x)/2+"px";l.style.top=(p.y+q.y)/2+"px";world.appendChild(l)}}
+ svg.innerHTML=h}
+D.nodeById={};D.nodes.forEach(n=>D.nodeById[n.id]=n);
+let V={x:0,y:0,k:1};
+const apply=()=>{world.style.transform="translate("+V.x+"px,"+V.y+"px) scale("+V.k+")"};
+function fit(){const vw=view.clientWidth,vh=view.clientHeight;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+ for(const n of D.nodes){const h=n.type==="frame"?n.h:els.get(n.id).offsetHeight;x0=Math.min(x0,n.x);y0=Math.min(y0,n.y);x1=Math.max(x1,n.x+n.w);y1=Math.max(y1,n.y+h)}
+ if(x0>x1){return}const k=Math.min(2,Math.min(vw/(x1-x0+80),vh/(y1-y0+80)));V={k,x:(vw-(x1-x0)*k)/2-x0*k,y:(vh-(y1-y0)*k)/2-y0*k};apply()}
+function zoomAt(f,cx,cy){const k=Math.max(.05,Math.min(3,V.k*f)),r=k/V.k;V={k,x:cx-(cx-V.x)*r,y:cy-(cy-V.y)*r};apply()}
+view.addEventListener("wheel",e=>{e.preventDefault();const r=view.getBoundingClientRect();if(e.ctrlKey||Math.abs(e.deltaY)>=Math.abs(e.deltaX)&&!e.shiftKey)zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?.01:.0018)),e.clientX-r.left,e.clientY-r.top);else{V.x-=e.deltaX;V.y-=e.deltaY;apply()}},{passive:false});
+const P=new Map();let last=0;
+view.addEventListener("pointerdown",e=>{if(e.target.closest("a"))return;view.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});view.classList.add("drag");last=0});
+view.addEventListener("pointermove",e=>{const o=P.get(e.pointerId);if(!o)return;const n={x:e.clientX,y:e.clientY};
+ if(P.size===1){V.x+=n.x-o.x;V.y+=n.y-o.y;apply()}
+ else if(P.size===2){const ids=[...P.keys()],other=P.get(ids.find(i=>i!==e.pointerId)),d0=Math.hypot(o.x-other.x,o.y-other.y),d1=Math.hypot(n.x-other.x,n.y-other.y);
+  const r=view.getBoundingClientRect();if(d0>0)zoomAt(d1/d0,(n.x+other.x)/2-r.left,(n.y+other.y)/2-r.top);V.x+=(n.x-o.x)/2;V.y+=(n.y-o.y)/2;apply()}
+ P.set(e.pointerId,n)});
+const end=e=>{P.delete(e.pointerId);if(!P.size)view.classList.remove("drag")};
+view.addEventListener("pointerup",end);view.addEventListener("pointercancel",end);
+document.getElementById("fit").onclick=fit;
+// outline (phone-friendly list)
+const list=document.getElementById("list");
+function buildList(){const cards=D.nodes.filter(n=>n.type==="card"),fr=D.nodes.filter(n=>n.type==="frame");
+ const by={};cards.forEach(c=>(by[c.parent||""]??=[]).push(c));let h="";
+ const sec=(t,c,cs)=>cs&&cs.length?'<section style="--fc:'+(c||"var(--accent)")+'"><h2>'+esc(t)+"</h2>"+cs.map(n=>'<div class="card" data-id="'+n.id+'" style="--c:'+(KC[n.kind]||KC.note)+'">'+cardHtml(n)+"</div>").join("")+"</section>":"";
+ fr.forEach(f=>{h+=sec(f.title||"Group",f.color,by[f.id])});h+=sec(fr.length?"Ungrouped":"Cards","",by[""]);list.innerHTML=h||"<p>This board is empty.</p>"}
+buildList();
+document.getElementById("mode").onclick=e=>{document.body.classList.toggle("outline");e.target.classList.toggle("on");e.target.textContent=document.body.classList.contains("outline")?"Canvas":"Outline";if(!document.body.classList.contains("outline"))setTimeout(fit,0)};
+document.getElementById("q").addEventListener("input",e=>{const w=e.target.value.toLowerCase().split(/\s+/).filter(Boolean);
+ const m=n=>w.every(x=>(n.title+"\n"+(n.bullets||"")).toLowerCase().includes(x));
+ for(const n of D.nodes){if(n.type!=="card")continue;const el=els.get(n.id);el.classList.toggle("hit",!!w.length&&m(n));el.classList.toggle("dim",!!w.length&&!m(n))}
+ list.querySelectorAll(".card").forEach(c=>{const n=D.nodeById[c.dataset.id];c.style.display=!w.length||m(n)?"":"none"})});
+const start=()=>{drawEdges();fit()};
+requestAnimationFrame(start);setTimeout(start,150);addEventListener("load",start);
+let rt;addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(()=>{if(!document.body.classList.contains("outline"))fit()},150)});
+</script></body></html>

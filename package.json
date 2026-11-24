@@ -1,0 +1,114 @@
+{
+  "name": "better-notes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-native freeform thinking canvas",
+  "main": "electron/main.mjs",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_URL=http://localhost:5173 electron . --no-sandbox\"",
+    "build": "tsc --noEmit && vite build",
+    "start": "vite build && electron . --no-sandbox",
+    "dist": "vite build && electron-builder"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@lydell/node-pty": "^1.2.0-beta.18"
+  },
+  "devDependencies": {
+    "@dagrejs/dagre": "^3.1.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "@xyflow/react": "^12.12.1",
+    "concurrently": "^10.0.7",
+    "cross-env": "^10.1.0",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "wait-on": "^9.5.1",
+    "zustand": "^5.1.0"
+  },
+  "author": "IshanG7240",
+  "license": "MIT",
+  "homepage": "https://github.com/IshanG7240/better-notes",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IshanG7240/better-notes.git"
+  },
+  "build": {
+    "appId": "io.github.ishang7240.betternotes",
+    "productName": "Better Notes",
+    "executableName": "better-notes",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/@lydell/**"
+    ],
+    "publish": null,
+    "artifactName": "Better-Notes-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "Better-Notes-${version}-portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Better-Notes-Setup-${version}.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "build/icon.png",
+      "maintainer": "IshanG7240",
+      "synopsis": "AI-native freeform thinking canvas"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "identity": null
+    }
+  }
+}
