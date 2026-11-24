@@ -160,7 +160,10 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .notes-view { margin-top: 3px; cursor: text; min-height: 18px; }
 .notes-edit.new { min-height: 120px; }
 .notes-view .empty { min-height: 120px; box-sizing: border-box; padding: 6px 8px; border: 1px dashed color-mix(in srgb, var(--muted) 35%, transparent); border-radius: 8px; opacity: .75; color: var(--muted); font-style: italic; font-size: calc(12.5px * var(--fs, 1) * var(--cfs, 1)); }
-.notes-edit { margin-top: 4px; font-size: calc(15px * var(--fs, 1) * var(--cfs, 1)); line-height: 1.5; resize: none; padding: 6px 8px; overflow: hidden; font-family: inherit; min-height: 52px; }
+.notes-edit { margin-top: 4px; font-size: calc(15px * var(--fs, 1) * var(--cfs, 1)); line-height: 1.5; resize: none; padding: 6px 8px; overflow: hidden; font-family: inherit; min-height: 52px; position: relative; white-space: pre-wrap; word-break: break-word; cursor: text; color: var(--text); background: var(--panel2); border: 1px solid var(--accent); border-radius: 8px; outline: none; }
+/* while writing, paragraphs get the same breathing room as on the rendered card */
+.notes-edit > div + div { margin-top: .5em; }
+.notes-edit.blank::before { content: attr(data-ph); position: absolute; left: 8px; top: 6px; color: var(--muted); pointer-events: none; }
 .md { list-style: none; margin: 0; padding: 0; font-size: calc(15px * var(--fs, 1) * var(--cfs, 1)); line-height: 1.5; color: color-mix(in srgb, var(--text) 88%, transparent); }
 .md li { position: relative; padding-left: 1.15em; margin: 0; word-break: break-word; }
 .md li + li { margin-top: .5em; } /* breathing room between points so long notes stay readable */
