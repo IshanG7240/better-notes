@@ -1,3 +1,12 @@
+## What's new in 0.1.1
+
+- **Space out** (Ctrl+E): a new layout tool that only nudges apart cards and frames that overlap or sit too close. Nothing else moves.
+- Layout tools renamed, gentlest first: **Space out**, **Line up** (was Tidy), **Pack** (was Compact). Hover a button to see what it does.
+- **Linking:** drop a new connection anywhere on a card; you no longer have to hit a connection point.
+- **Angled lines** are shorter and calmer: no more hooks between close cards, straight lines when cards face each other, one bend for diagonal cards.
+- **Notes:** space between points (also while writing), a clear gap after each bullet, and **nested points** (Tab / Shift+Tab).
+- **Card type:** click the type chip to pick from all five types at once, or select cards and press 1–5.
+
 ## Download
 
 | System | File |
