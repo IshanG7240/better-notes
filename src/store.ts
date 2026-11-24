@@ -172,6 +172,8 @@ interface State {
   updateData(id: string, patch: Partial<CardData>): void;
   updateFrame(id: string, patch: Partial<FrameData>): void;
   bumpFont(id: string, delta: number | "reset"): void;
+  /** set the type of a card; of every selected card when `id` is part of the selection (or when id is omitted) */
+  setKind(id: string | null, kind: Kind): void;
   togglePin(id?: string): void;
   setCardWidth(w: number): void;
   autoFitWidth(): void;
@@ -491,6 +493,14 @@ export const useStore = create<State>()((set, get) => ({
     set((s) => ({
       board: { ...s.board, nodes: mapNode(s.board.nodes, id, (n) => (isFrame(n) ? { ...n, data: { ...n.data, ...patch } } : n)) },
     })),
+  setKind(id, kind) {
+    set((s) => {
+      const self = id ? s.board.nodes.find((n) => n.id === id) : null;
+      const ids = new Set(!id || self?.selected ? s.board.nodes.filter((n) => n.selected && isCard(n)).map((n) => n.id) : [id]);
+      if (!ids.size) return {};
+      return { board: { ...s.board, nodes: s.board.nodes.map((n) => (ids.has(n.id) && isCard(n) ? ({ ...n, data: { ...n.data, kind } } as AppNode) : n)) } };
+    });
+  },
   bumpFont(id, delta) {
     set((s) => {
       const self = s.board.nodes.find((n) => n.id === id);

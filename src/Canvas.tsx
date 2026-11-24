@@ -5,7 +5,7 @@ import CardNode from "./CardNode";
 import FrameNode from "./FrameNode";
 import LabelEdge from "./LabelEdge";
 import { useStore } from "./store";
-import { isCard, isFrame, type AppNode, type FrameNodeT, type NoteEdge as AppEdge } from "./types";
+import { isCard, isFrame, KINDS, type AppNode, type FrameNodeT, type NoteEdge as AppEdge } from "./types";
 import { setSpawn } from "./spawn";
 import { boxRect, CARD_W, descendants, frameSize, parentMap } from "./layout";
 import { fullH } from "./heights";
@@ -189,6 +189,11 @@ export default function Canvas() {
       if (!term && !isTyping(e.target) && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "e") {
         e.preventDefault();
         st.organizeLayout("space");
+        return;
+      }
+      if (!term && !st.modal && !isTyping(e.target) && !e.ctrlKey && !e.metaKey && !e.altKey && /^[1-5]$/.test(e.key) && st.board.nodes.some((n) => n.selected && n.type === "card")) {
+        e.preventDefault();
+        st.setKind(null, KINDS[Number(e.key) - 1]); // 1 idea · 2 question · 3 risk · 4 task · 5 note
         return;
       }
       if (!term && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") {

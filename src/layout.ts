@@ -7,7 +7,7 @@ export const setCardDefault = (w: number) => { CARD_W = w; };
 /** a card's width: its own (resized) width, else the default */
 export const cardW = (n: { width?: number | null }) => n.width ?? CARD_W;
 export const estHeight = (n: CardNodeT) =>
-  n.measured?.height ?? 70 + Math.max(1, n.data.bullets.split("\n").filter(Boolean).length) * 24;
+  n.measured?.height ?? 70 + Math.max(1, n.data.bullets.split("\n").filter(Boolean).length) * 30;
 
 /**
  * Lay out `fresh` nodes (positions ignored) and return top-left positions.

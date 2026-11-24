@@ -54,31 +54,36 @@ export function Inline({ text }: { text: string }): ReactNode {
   return <>{out}</>;
 }
 
-/** Renders note text: every line is a bullet unless it is a heading/quote/checkbox. */
+/** Nesting depth of a note line: every 2 leading spaces (a tab counts as 2) is one level. */
+export const depthOf = (raw: string) => Math.floor((raw.match(/^[ \t]*/)?.[0] ?? "").replace(/\t/g, "  ").length / 2);
+
+/** Renders note text: every line is a bullet unless it is a heading/quote/checkbox. Indented lines nest. */
 function MdLinesImpl({ value, onToggle }: { value: string; onToggle?: (line: number) => void }) {
   const lines = value.split("\n");
   return (
     <ul className="md">
       {lines.map((raw, i) => {
         if (!raw.trim()) return null;
-        const indent = Math.floor((raw.match(/^ */)?.[0].length ?? 0) / 2);
+        const indent = depthOf(raw);
         const t = raw.trim();
-        const style = { marginLeft: indent * 14 };
+        const style = { marginLeft: `${indent * 1.15}em`, ["--d" as string]: indent };
+        const prev = lines.slice(0, i).reverse().find((l) => l.trim());
+        const sub = prev !== undefined && indent > depthOf(prev); // first sub-point right under its parent: sits close to it
         let m: RegExpExecArray | null;
-        if ((m = /^(#{1,3})\s+(.*)$/.exec(t))) return <li key={i} className={`h h${m[1].length}`} style={style}><Inline text={m[2]} /></li>;
+        if ((m = /^(#{1,3})\s+(.*)$/.exec(t))) return <li key={i} className={`h h${m[1].length}`} style={style} data-d={Math.min(indent, 2)} data-sub={sub || undefined}><Inline text={m[2]} /></li>;
         if ((m = /^[-*+]\s+\[( |x|X)\]\s+(.*)$/.exec(t))) {
           const done = m[1] !== " ";
           return (
-            <li key={i} className={`task${done ? " done" : ""}`} style={style}>
+            <li key={i} className={`task${done ? " done" : ""}`} style={style} data-d={Math.min(indent, 2)} data-sub={sub || undefined}>
               <input type="checkbox" checked={done} onClick={(e) => e.stopPropagation()} onChange={() => onToggle?.(i)} />
               <span><Inline text={m[2]} /></span>
             </li>
           );
         }
-        if ((m = /^>\s?(.*)$/.exec(t))) return <li key={i} className="quote" style={style}><Inline text={m[1]} /></li>;
-        if ((m = /^(\d+)[.)]\s+(.*)$/.exec(t))) return <li key={i} className="num" data-n={m[1]} style={style}><Inline text={m[2]} /></li>;
+        if ((m = /^>\s?(.*)$/.exec(t))) return <li key={i} className="quote" style={style} data-d={Math.min(indent, 2)} data-sub={sub || undefined}><Inline text={m[1]} /></li>;
+        if ((m = /^(\d+)[.)]\s+(.*)$/.exec(t))) return <li key={i} className="num" data-n={m[1]} style={style} data-d={Math.min(indent, 2)} data-sub={sub || undefined}><Inline text={m[2]} /></li>;
         const body = t.replace(/^[-*+]\s+/, "");
-        return <li key={i} style={style}><Inline text={body} /></li>;
+        return <li key={i} style={style} data-d={Math.min(indent, 2)} data-sub={sub || undefined}><Inline text={body} /></li>;
       })}
     </ul>
   );

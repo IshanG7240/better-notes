@@ -54,7 +54,7 @@ export function toMarkdown(title: string, nodes: AppNode[], edges: NoteEdge[]): 
     out.push(`${pad}- ${label}**${it.node.data.title || "Untitled"}** _(${it.node.data.kind})_${frame}`);
     for (const l of it.node.data.bullets.split("\n")) {
       if (!l.trim()) continue;
-      const indent = Math.floor((l.match(/^ */)?.[0].length ?? 0) / 2);
+      const indent = Math.floor((l.match(/^[ \t]*/)?.[0] ?? "").replace(/\t/g, "  ").length / 2);
       out.push(`${pad}  ${"  ".repeat(indent)}- ${l.trim().replace(/^[-*+]\s+/, "")}`);
     }
     it.children.forEach((c) => walk(c, d + 1));

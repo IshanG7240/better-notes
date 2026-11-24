@@ -3,7 +3,7 @@ import { Icon } from "./icons";
 import { useStore } from "./store";
 import { buildTree, toMarkdown, type TreeItem } from "./outlineTree";
 import { Notes, Title } from "./Editable";
-import { KINDS } from "./types";
+import { KindPicker } from "./KindPicker";
 
 function Item({ it, depth }: { it: TreeItem; depth: number }) {
   const update = useStore((s) => s.updateData);
@@ -14,11 +14,7 @@ function Item({ it, depth }: { it: TreeItem; depth: number }) {
   return (
     <div className="ol-item" style={{ marginLeft: depth ? 22 : 0 }}>
       <div className={`ol-row kind-${n.data.kind}${n.selected ? " sel" : ""}${n.data.ghost ? " ghost" : ""}`} style={{ ["--cfs" as string]: n.data.fs ?? 1 }} onMouseDown={() => select(n.id)}>
-        <button
-          className="ol-dot"
-          title={`${n.data.kind} — click to change`}
-          onClick={() => update(n.id, { kind: KINDS[(KINDS.indexOf(n.data.kind) + 1) % KINDS.length] })}
-        />
+        <KindPicker id={n.id} kind={n.data.kind} variant="dot" />
         <div className="ol-main">
           <div className="ol-titleline">
             {it.edgeLabel && <span className="ol-edge">{it.edgeLabel} →</span>}

@@ -1,7 +1,8 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { reportLabel, useLabelOffset } from "./labels";
-import { BaseEdge, EdgeLabelRenderer, getBezierPath, getSmoothStepPath, getStraightPath, type EdgeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, getStraightPath, type EdgeProps } from "@xyflow/react";
+import { stepRoute, type Side } from "./route";
 import { useStore } from "./store";
 import { LINK_TYPES, typeOf } from "./linktypes";
 import type { NoteEdge } from "./types";
@@ -9,7 +10,7 @@ import type { NoteEdge } from "./types";
 function LabelEdge(p: EdgeProps) {
   const edgeStyle = useStore((s) => s.edgeStyle);
   const labelsOnFocus = useStore((s) => s.labelsOnFocus);
-  const d = (p.data ?? {}) as { st?: string; so?: number; to?: number; del?: boolean };
+  const d = (p.data ?? {}) as { st?: string; so?: number; to?: number; del?: boolean; ay?: number; ax?: number };
   const resolve = useStore((s) => s.resolveEdgeDel);
   const shift = (pos: string, o: number) => (pos === "left" || pos === "right" ? [0, o] : [o, 0]);
   const [sdx, sdy] = shift(p.sourcePosition, d.so ?? 0);
@@ -18,24 +19,17 @@ function LabelEdge(p: EdgeProps) {
     sourceX: p.sourceX + sdx, sourceY: p.sourceY + sdy, sourcePosition: p.sourcePosition,
     targetX: p.targetX + tdx, targetY: p.targetY + tdy, targetPosition: p.targetPosition,
   };
+  // cards whose edges overlap: one straight line across (see straightAcross in lines.ts)
+  if (d.ay !== undefined) geo.sourceY = geo.targetY = d.ay;
+  if (d.ax !== undefined) geo.sourceX = geo.targetX = d.ax;
   let path: string, lx: number, ly: number;
   if (edgeStyle === "line") [path, lx, ly] = getStraightPath(geo);
   else if (edgeStyle === "step") {
-    // spread parallel lines: each edge gets its own vertical lane near the middle
+    // parallel Z-links get their own middle lane (stepRoute keeps it between the two cards)
     let h = 0;
     for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) | 0;
-    const lane = ((Math.abs(h) % 7) - 3) * 10;
-    {
-      const horiz = (p.sourcePosition === "right" && p.targetPosition === "left") || (p.sourcePosition === "left" && p.targetPosition === "right");
-      const vert = (p.sourcePosition === "bottom" && p.targetPosition === "top") || (p.sourcePosition === "top" && p.targetPosition === "bottom");
-      [path, lx, ly] = getSmoothStepPath({
-        ...geo,
-        borderRadius: 10,
-        offset: 22,
-        centerX: horiz ? (p.sourceX + p.targetX) / 2 + lane : undefined,
-        centerY: vert ? (p.sourceY + p.targetY) / 2 + lane : undefined,
-      });
-    }
+    const lane = ((Math.abs(h) % 7) - 3) * 8;
+    [path, lx, ly] = stepRoute(geo.sourceX, geo.sourceY, p.sourcePosition as Side, geo.targetX, geo.targetY, p.targetPosition as Side, lane);
   } else [path, lx, ly] = getBezierPath(geo);
   const st = d.st ?? "";
   const editing = useStore((s) => s.editingEdge === p.id);

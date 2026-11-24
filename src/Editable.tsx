@@ -96,13 +96,24 @@ export function Notes({
     const a = el.selectionStart;
     const ls = el.value.lastIndexOf("\n", a - 1) + 1;
     if (e.key === "Tab") {
+      // nest / un-nest every line touched by the cursor or selection
       e.preventDefault();
       e.stopPropagation();
-      const next = e.shiftKey
-        ? el.value.slice(0, ls) + el.value.slice(ls).replace(/^ {1,2}/, "")
-        : el.value.slice(0, ls) + "  " + el.value.slice(ls);
-      onChange(next);
-      requestAnimationFrame(() => el.setSelectionRange(a + (e.shiftKey ? -2 : 2), a + (e.shiftKey ? -2 : 2)));
+      const b = el.selectionEnd;
+      const le = el.value.indexOf("\n", Math.max(a, b - (b > a && el.value[b - 1] === "\n" ? 1 : 0)));
+      const end = le < 0 ? el.value.length : le;
+      const block = el.value.slice(ls, end).split("\n");
+      let first = 0, total = 0;
+      const out = block.map((l, i) => {
+        const nl = e.shiftKey ? l.replace(/^(\t| {1,2})/, "") : "  " + l;
+        const d = nl.length - l.length;
+        if (i === 0) first = d;
+        total += d;
+        return nl;
+      });
+      onChange(el.value.slice(0, ls) + out.join("\n") + el.value.slice(end));
+      const na = Math.max(ls, a + first), nb = b + total;
+      requestAnimationFrame(() => el.setSelectionRange(na, a === b ? na : Math.max(na, nb)));
     } else if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey) {
       // continue list markers
       const line = el.value.slice(ls, a);
@@ -110,6 +121,13 @@ export function Notes({
       if (m) {
         e.preventDefault();
         if (line.trim() === m[0].trim()) {
+          if (m[1]) {
+            // empty sub-point -> step out one level (like Google Docs)
+            const out = line.replace(/^(\t| {1,2})/, "");
+            onChange(el.value.slice(0, ls) + out + el.value.slice(a));
+            requestAnimationFrame(() => el.setSelectionRange(ls + out.length, ls + out.length));
+            return;
+          }
           // empty bullet -> end the list
           onChange(el.value.slice(0, ls) + el.value.slice(a));
           return;

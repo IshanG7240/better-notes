@@ -3,7 +3,8 @@ import { fullH } from "./heights";
 import { Icon } from "./icons";
 import { NodeResizeControl, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { AllHandles } from "./Handles";
-import { KINDS, type CardNodeT } from "./types";
+import { type CardNodeT } from "./types";
+import { KindPicker } from "./KindPicker";
 import { useStore } from "./store";
 import { Notes, Title } from "./Editable";
 import { MdLines } from "./md";
@@ -57,13 +58,7 @@ function CardNode({ id, data, selected }: NodeProps<CardNodeT>) {
         <button title="Rewrite with AI (this card, or all selected)" onClick={() => openRewrite(id)}>✎ Rewrite</button>
       </div>
       {data.pinned && <span className="pin-badge" title="Pinned: layout tools leave this card where it is"><Icon name="pin" size={13} /></span>}
-      <button
-        className="kind nodrag"
-        title="Click to change type"
-        onClick={() => update(id, { kind: KINDS[(KINDS.indexOf(data.kind) + 1) % KINDS.length] })}
-      >
-        {data.kind}
-      </button>
+      <KindPicker id={id} kind={data.kind} />
       {data.proposal ? (
         <div className="proposal">
           <div className="p-bar nodrag">

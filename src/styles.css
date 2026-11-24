@@ -137,7 +137,22 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ghost-actions { position: absolute; top: -13px; right: 8px; display: flex; gap: 4px; }
 .ghost-actions button { padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--panel); }
 .ghost-actions button:first-child { color: var(--task); } .ghost-actions button:last-child { color: var(--risk); }
-.kind { font: calc(11px * var(--fs, 1) * var(--cfs, 1)) var(--ui-font); text-transform: uppercase; letter-spacing: .09em; color: var(--c); background: transparent; border: none; padding: 0; opacity: .9; }
+/* card type: a chip that opens a picker with all five types (KindPicker.tsx) */
+.kind-pick { position: relative; display: flex; margin: -1px 0 3px; z-index: 5; }
+.kind-pick.open { z-index: 50; }
+.kind { display: inline-flex; align-items: center; gap: 6px; font: 600 calc(11.5px * var(--fs, 1)) var(--ui-font); text-transform: uppercase; letter-spacing: .07em; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); border-radius: 999px; padding: 3px 9px 3px 7px; cursor: pointer; }
+.kind:hover, .kind-pick.open .kind { background: color-mix(in srgb, var(--c) 22%, transparent); }
+.kind i, .kind-opt i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.kind-caret { font-size: .85em; opacity: .7; }
+.kind-menu { position: fixed; z-index: 200; width: 320px; display: flex; flex-direction: column; gap: 2px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); font-family: var(--ui-font); }
+.kind-opt { display: grid; grid-template-columns: 10px 78px 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; text-align: left; color: var(--fg); cursor: pointer; }
+.kind-opt:hover { background: color-mix(in srgb, var(--c) 14%, transparent); }
+.kind-opt.on { border-color: color-mix(in srgb, var(--c) 50%, transparent); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.kind-opt .ko-name { font-weight: 650; font-size: 13.5px; text-transform: capitalize; color: var(--c); }
+.kind-opt .ko-tip { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.kind-opt kbd { font: 11px var(--ui-font); padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); }
+.kind-idea { --c: var(--idea); } .kind-question { --c: var(--question); } .kind-risk { --c: var(--risk); } .kind-task { --c: var(--task); } .kind-note { --c: var(--note); }
+.kp-dot { margin: 4px 0 0; } .kp-dot .kind { width: 14px; height: 14px; padding: 0; border-radius: 50%; background: var(--c); border: none; }
 .title-view, .title-edit { font-weight: 650; font-size: calc(17px * var(--fs, 1) * var(--cfs, 1)); padding: 2px 0; border-radius: 4px; width: 100%; min-height: 22px; font-family: inherit; }
 .title-view { cursor: grab; word-break: break-word; } .title-view.empty { color: var(--muted); font-weight: 500; font-style: italic; opacity: .75; background: color-mix(in srgb, var(--muted) 10%, transparent); padding: 2px 6px; }
 .title-edit { background: rgba(128,128,128,.14); border: none; padding: 2px 4px; }
@@ -147,14 +162,15 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .notes-view .empty { min-height: 120px; box-sizing: border-box; padding: 6px 8px; border: 1px dashed color-mix(in srgb, var(--muted) 35%, transparent); border-radius: 8px; opacity: .75; color: var(--muted); font-style: italic; font-size: calc(12.5px * var(--fs, 1) * var(--cfs, 1)); }
 .notes-edit { margin-top: 4px; font-size: calc(15px * var(--fs, 1) * var(--cfs, 1)); line-height: 1.5; resize: none; padding: 6px 8px; overflow: hidden; font-family: inherit; min-height: 52px; }
 .md { list-style: none; margin: 0; padding: 0; font-size: calc(15px * var(--fs, 1) * var(--cfs, 1)); line-height: 1.5; color: color-mix(in srgb, var(--text) 88%, transparent); }
-.md li { position: relative; padding-left: 14px; margin: 2px 0; word-break: break-word; }
-.md li::before { content: "•"; position: absolute; left: 2px; color: var(--c, var(--accent)); }
-.md li.h { font-weight: 700; padding-left: 0; margin-top: 6px; } .md li.h::before, .md li.task::before, .md li.quote::before { content: ""; }
+.md li { position: relative; padding-left: 1.15em; margin: 0; word-break: break-word; }
+.md li + li { margin-top: .5em; } /* breathing room between points so long notes stay readable */
+.md li::before { content: "•"; position: absolute; left: .2em; color: var(--c, var(--accent)); } /* ~.6em of air between the marker and the text */
+.md li.h { font-weight: 700; padding-left: 0; margin-top: .85em; } .md li.h:first-child { margin-top: 0; } .md li.h::before, .md li.task::before, .md li.quote::before { content: ""; }
 .md li.h1 { font-size: 1.07em; font-weight: 650; } .md li.h2 { font-size: 1.03em; font-weight: 650; } .md li.h3 { font-size: 1em; color: var(--muted); }
 .md li.task { padding-left: 0; display: flex; gap: 6px; align-items: flex-start; } .md li.task input { width: auto; margin-top: 3px; accent-color: var(--accent); cursor: pointer; }
 .md li.task.done span { text-decoration: line-through; opacity: .55; }
 .md li.quote { padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); font-style: italic; }
-.md li.num { padding-left: 18px; } .md li.num::before { content: attr(data-n) "."; left: 0; font-size: 12px; color: var(--muted); }
+.md li.num { padding-left: 1.5em; } .md li.num::before { content: attr(data-n) "."; left: 0; font-size: 12px; color: var(--muted); }
 .more { color: var(--muted); font-size: 15px; }
 .react-flow__handle { z-index: 6; width: 12px; height: 12px; background: var(--c, var(--accent)); border: 2px solid var(--bg); opacity: 0; transition: opacity .15s; }
 .card:hover .react-flow__handle, .card.selected .react-flow__handle { opacity: 1; }
@@ -564,8 +580,9 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none; }
 .card-tools button { padding: 2px 8px; }
 
 /* kind label: only question / risk / task show it; idea and note reveal it on hover (still clickable) */
-.card.kind-idea > .kind, .card.kind-note > .kind { position: absolute; top: -8px; left: 12px; padding: 0 5px; border-radius: 5px; background: var(--panel); opacity: 0; transition: opacity .15s; }
-.card.kind-idea:hover > .kind, .card.kind-note:hover > .kind { opacity: .75; }
+/* idea and note are the everyday types: their chip sits on the top edge and shows on hover / selection */
+.card.kind-idea > .kind-pick, .card.kind-note > .kind-pick { position: absolute; top: -13px; left: 12px; margin: 0; opacity: 0; transition: opacity .15s; } .card.kind-idea > .kind-pick .kind, .card.kind-note > .kind-pick .kind { background: var(--panel); }
+.card.kind-idea:hover > .kind-pick, .card.kind-note:hover > .kind-pick, .card.selected > .kind-pick, .card > .kind-pick.open { opacity: 1; }
 
 /* suggested (ghost) frames from the assistant */
 .frame.ghost { border-style: dashed !important; opacity: .85; }
@@ -598,3 +615,7 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none; }
 .hint-keeps { color: var(--muted); }
 .hint kbd { align-self: flex-start; font: 11.5px var(--ui-font); padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); }
 .hint-wrap:hover .hint { opacity: 1; transform: none; transition-delay: .35s; }
+/* nested points: a different marker per level, and a sub-point sits close under its parent */
+.md li[data-d="1"]::before { content: "◦"; }
+.md li[data-d="2"]::before { content: "▪"; font-size: .8em; top: .15em; }
+.md li[data-sub] { margin-top: .2em; }
