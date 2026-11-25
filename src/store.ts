@@ -824,7 +824,11 @@ export const useStore = create<State>()((set, get) => ({
       ? spaceOut(visible, sc.fixed, fixedH, { fitOnly: sc.fitOnly, even: !quiet }) // pressed: even gaps; automatic: overlaps only
       : tidy(visible, flowEdges(aggregateEdges(board.nodes, board.edges)), sc.fixed, fixedH, sc.fitOnly);
     const pinNote = sc.pinned ? ` ${sc.pinned} pinned card${sc.pinned > 1 ? "s" : ""} stayed put.` : "";
-    if (!pos.size && !size.size) { if (!quiet) set({ note: (mode === "space" ? "Everything already has room." : "Already lined up.") + pinNote }); return; }
+    // always say what the tool worked on, so a forgotten selection never looks like "it did nothing"
+    const picked = visible.filter((n) => n.selected).length;
+    const where = sc.whole ? "the whole board" : `the ${picked} selected item${picked > 1 ? "s" : ""} (select nothing for the whole board)`;
+    const tool = mode === "space" ? "Space out" : "Line up";
+    if (!pos.size && !size.size) { if (!quiet) set({ note: `${tool}: nothing to change on ${where}: the gaps are already even.${pinNote}` }); return; }
     const shift = new Map<string, { dx: number; dy: number }>();
     for (const f of blocks) {
       const np = pos.get(f.id);
@@ -832,7 +836,7 @@ export const useStore = create<State>()((set, get) => ({
     }
     set((s) => ({
       animating: true,
-      note: quiet ? s.note : pinNote.trim() || null,
+      note: quiet ? s.note : `${tool}: evened the gaps on ${where}.${pinNote}`,
       board: {
         ...s.board,
         nodes: s.board.nodes.map((n) => {
