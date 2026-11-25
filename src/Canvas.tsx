@@ -190,6 +190,11 @@ export default function Canvas() {
         st.addRootCard();
         return;
       }
+      if (!term && !st.modal && !isTyping(e.target) && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        st.addFrame({ x: 0, y: 0 }); // an empty frame under the mouse
+        return;
+      }
       if (!term && !isTyping(e.target) && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "e") {
         e.preventDefault();
         st.organizeLayout("space");
@@ -243,7 +248,7 @@ export default function Canvas() {
 
   // ---- marquee selection: double-click then drag (or Shift+drag) on empty canvas ----
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
-  const mq = useRef<{ x0: number; y0: number; add: boolean } | null>(null);
+  const mq = useRef<{ x0: number; y0: number; add: boolean; alt?: boolean } | null>(null);
   const lastClick = useRef({ t: 0, x: 0, y: 0 });
   const down = useRef({ x: 0, y: 0 });
   const isPane = (t: EventTarget) => (t as HTMLElement).classList?.contains("react-flow__pane");
@@ -264,12 +269,13 @@ export default function Canvas() {
       const x1 = e.clientX - r.left, y1 = e.clientY - r.top;
       if (Math.hypot(x1 - m.x0, y1 - m.y0) < 4) {
         if (m.add) { useStore.getState().selectIds([], false); return; }
-        // double-click on empty canvas: new card right there (and keep it selected through the trailing click)
+        // double-click on empty canvas: new card right there (Alt + double-click: a new frame), kept selected through the trailing click
         const eat = (ev: Event) => ev.stopPropagation();
         window.addEventListener("click", eat, { capture: true, once: true });
         setTimeout(() => window.removeEventListener("click", eat, true), 80);
         const p = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        useStore.getState().addCard({ x: Math.round(p.x - cardDefault / 2), y: Math.round(p.y - 30) });
+        if (m.alt || e.altKey) useStore.getState().addFrame({ x: Math.round(p.x - 230), y: Math.round(p.y - 30) });
+        else useStore.getState().addCard({ x: Math.round(p.x - cardDefault / 2), y: Math.round(p.y - 30) });
         return;
       }
       // the click that follows mouseup would clear the selection (React Flow's pane click)
@@ -512,7 +518,7 @@ export default function Canvas() {
           e.stopPropagation();
           e.preventDefault();
           const r = wrap.current!.getBoundingClientRect();
-          mq.current = { x0: e.clientX - r.left, y0: e.clientY - r.top, add: e.shiftKey };
+          mq.current = { x0: e.clientX - r.left, y0: e.clientY - r.top, add: e.shiftKey, alt: e.altKey };
           setMarquee({ x0: mq.current.x0, y0: mq.current.y0, x1: mq.current.x0, y1: mq.current.y0 });
           lastClick.current.t = 0;
         }
@@ -608,6 +614,7 @@ export default function Canvas() {
         <div className="empty-hint">
           <div className="eh-title">An empty board</div>
           <div>Double-click anywhere to add a card, or press <kbd>N</kbd></div>
+          <div><kbd>Alt</kbd>+double-click (or <kbd>F</kbd>) adds a frame</div>
           <div>Or open the assistant (<kbd>Ctrl</kbd>+<kbd>K</kbd>) and use <b>From text</b> to turn notes into cards</div>
           <button className="eh-help" onClick={() => useStore.getState().setModal("help")}>Press <kbd>?</kbd> for the guide</button>
         </div>

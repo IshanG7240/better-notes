@@ -60,7 +60,7 @@ const SECTIONS: [string, C[]][] = [
       "Drag a frame by its title: everything inside moves with it; double-click the title to rename it",
       "Drag a card over a frame: it lights up where your pointer is; let go and the frame makes room for it",
       "Select a frame and drag its edges or corners to resize it; it keeps the size you give it",
-      "Or click **Frame** in the toolbar for an empty one",
+      "For an empty frame: Alt+double-click the canvas, press F, or click **Frame** in the toolbar",
     ]],
   ]],
   ["4 · Tidying up", [

@@ -341,7 +341,7 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
         <li><b>Link two cards:</b> hover a card, drag from one of the dots on its edge and drop anywhere on the other card.</li>
         <li><b>Label a link:</b> double-click it. Click a link to choose its type: leads to, part of, supports, contradicts, risk for.</li>
         <li><K k="Ctrl+H" /> hides lines; <b>View</b> in the toolbar has more line options.</li>
-        <li><b>Frame:</b> select cards and press <K k="Ctrl+G" />, or click <b>Frame</b> for an empty one. Click a frame's title or its empty inside to select it, drag the title to move it with everything inside, double-click the title to rename it.</li>
+        <li><b>Frame:</b> select cards and press <K k="Ctrl+G" />, or <b>Alt+double-click</b> the canvas (or press <K k="F" />, or click <b>Frame</b>) for an empty one. Click a frame's title or its empty inside to select it, drag the title to move it with everything inside, double-click the title to rename it.</li>
         <li><b>Drop a card into a frame:</b> the frame under your mouse pointer lights up; let go and the card lands inside it, next to what is already there (it never lands on top of another card), the frame grows sideways or down to keep a screen-like shape, and nearby cards step aside. Let go outside every frame and the card moves out. A selection box started outside a frame also selects the frame.</li>
         <li><b>Resize a frame:</b> select it and drag its edges or corners. The size you give it sticks: it only grows from then on, and Line up / Arrange fill it in as many columns as fit.</li>
         <li>A card belongs to the frame its centre is in. Frames can be collapsed into a single block.</li>
@@ -379,7 +379,7 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
       <table className="keys">
         <tbody>
           {([
-            ["Double-click canvas / N", "New card"], ["Tab", "Child card of the selected card"], ["1–5", "Card type: idea, question, risk, task, note"],
+            ["Double-click canvas / N", "New card"], ["Alt+double-click / F", "New frame"], ["Tab", "Child card of the selected card"], ["1–5", "Card type: idea, question, risk, task, note"],
             ["Delete", "Delete selection"], ["Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"], ["Ctrl+G", "Frame around the selection"],
             ["Ctrl+E", "Space out"], ["Ctrl+L", "Line up"], ["Ctrl+Shift+L", "Pack"], ["Ctrl+H", "Hide / show lines"],
             ["Ctrl+F", "Search"], ["Ctrl+K", "Command palette"], ["Ctrl+J", "Assistant"], ["Enter / Esc", "Accept / reject AI suggestions"],

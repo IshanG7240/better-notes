@@ -680,7 +680,7 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none; }
 /* the card being dragged lifts off the board */
 .react-flow__node-card.dragging .card {
   box-shadow: 0 18px 40px rgba(0,0,0,.22), 0 4px 10px rgba(0,0,0,.12);
-  transform: scale(1.02) rotate(-.6deg);
+  transform: scale(1.02);
   cursor: grabbing;
 }
 .react-flow__node-card .card { transition: transform .12s ease, box-shadow .12s ease; }

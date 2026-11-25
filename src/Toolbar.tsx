@@ -92,7 +92,7 @@ export default function Toolbar() {
       {canvas && (
         <>
           <Btn icon="card" label="Card" tip="Add a card at the cursor (or press N)" onClick={() => st.addRootCard()} />
-          <Btn icon="frame" label="Frame" tip="Add an empty frame" onClick={() => st.addFrame({ x: 0, y: 0 })} />
+          <Btn icon="frame" label="Frame" tip="Add an empty frame at the cursor (or press F, or Alt+double-click the canvas)" onClick={() => st.addFrame({ x: 0, y: 0 })} />
           <Btn icon="group" label="Group" tip="Wrap the selection in a frame · Ctrl+G" disabled={!selBoxes} onClick={() => st.groupSelection()} />
           <Sep />
           <Btn
