@@ -651,6 +651,7 @@ export const useStore = create<State>()((set, get) => ({
     set((s) => ({ board: { ...s.board, nodes: s.board.nodes.map((n) => (pos.has(n.id) ? { ...n, position: pos.get(n.id)! } : n)) } })),
 
   organizeLayout(mode, quiet) {
+    settleUndo();
     const { board } = get();
     const { hidden } = collapsedOwners(board.nodes);
     const visible = board.nodes.filter((n) => !hidden.has(n.id));
@@ -686,6 +687,7 @@ export const useStore = create<State>()((set, get) => ({
     setTimeout(() => set({ animating: false }), 600);
   },
   compactLayout(second, only) {
+    if (!second) settleUndo();
     const { board } = get();
     const { hidden } = collapsedOwners(board.nodes);
     const visible = board.nodes.filter((n) => !hidden.has(n.id));
@@ -1035,14 +1037,15 @@ export const useStore = create<State>()((set, get) => ({
     const fail = (msg: string) => {
       if (get().board.id !== boardId) {
         run = null;
-        set({ asking: false, busy: null, askPending: null, askLive: [], askStream: "" });
+        (absorbUntil = Math.min(absorbUntil, Date.now() + 2500)), set({ asking: false, busy: null, askPending: null, askLive: [], askStream: "" });
         return;
       }
       const log = [...get().askLog, { id: uid(), q: label, a: msg, t: Date.now(), added: 0, edited: 0, links: 0, steps: 0, error: true }];
       save(log);
       run = null;
-      set({ asking: false, busy: null, askPending: null, askLive: [], askStream: "", askLog: log });
+      (absorbUntil = Math.min(absorbUntil, Date.now() + 2500)), set({ asking: false, busy: null, askPending: null, askLive: [], askStream: "", askLog: log });
     };
+    settleUndo(10 * 60 * 1000); // the whole assistant turn is one undo step
     run = { boardId, snapshot: board, refs: new Map(), applied: new Set(), counts: { added: 0, edited: 0, links: 0, removed: 0, unlinked: 0, grouped: 0 }, notes: [] };
     set({ askStream: "", askUndo: null, asking: true, busy: mode === "ask" ? "Thinking…" : label, askPending: label, askOpen: true, askLive: ["Reading the board…"], error: null, note: null });
     let res;
@@ -1056,13 +1059,14 @@ export const useStore = create<State>()((set, get) => ({
       if (get().board.id === boardId) fail(err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(err));
       return;
     }
-    if (get().board.id !== boardId) { set({ asking: false, busy: null, askPending: null, askLive: [] }); return; }
+    if (get().board.id !== boardId) { (absorbUntil = Math.min(absorbUntil, Date.now() + 2500)), set({ asking: false, busy: null, askPending: null, askLive: [] }); return; }
     if (!res.ok) { fail(res.error); return; }
     const { answer, ops, edits, deletes, unlinks, groups: grp, steps, structure, trace } = res.data;
     const r = run;
     if (structure && r) applyStructure(structure, r, set, get);
     else if (mode !== "doc") get().applyAgentOps({ nodes: ops.nodes, edges: ops.edges, edits, deletes, unlinks, groups: grp }); // reconcile anything the live stream missed
     run = null;
+    absorbUntil = Date.now() + 2500; // its follow-up layout passes still belong to it
     const c = r?.counts ?? { added: 0, edited: 0, links: 0, removed: 0, unlinked: 0, grouped: 0 };
     if (mode === "doc") set({ doc: answer, usage: res.usage });
     const entry: AskEntry = {
@@ -1085,7 +1089,7 @@ export const useStore = create<State>()((set, get) => ({
     else if (r && get().agentMode !== "review" && (c.added || c.edited || c.links || c.grouped || (get().agentMode === "full" && (c.removed || c.unlinked)))) set({ askUndo: { entryId: entry.id, board: r.snapshot } });
     const log = [...get().askLog, entry];
     save(log);
-    set({ asking: false, busy: null, askPending: null, askLive: [], askStream: "", askLog: log, usage: res.usage });
+    (absorbUntil = Math.min(absorbUntil, Date.now() + 2500)), set({ asking: false, busy: null, askPending: null, askLive: [], askStream: "", askLog: log, usage: res.usage });
   },
   async cancelAsk() {
     if (!get().asking) return;
@@ -1448,12 +1452,26 @@ function onlyViewStateChanged(a: AppNode[], b: AppNode[]) {
 
 // ---------- undo / redo (whole-board snapshots, recorded after 350ms of quiet) ----------
 type Snap = { nodes: AppNode[]; edges: NoteEdge[] };
-const past: Snap[] = [];
-const future: Snap[] = [];
+let past: Snap[] = [];
+let future: Snap[] = [];
 let committed: Snap | null = null;
 let committedKey = "";
 let histBoard = "";
 let histTimer: ReturnType<typeof setTimeout> | undefined;
+const UNDO_STEPS = 200;
+/** each board keeps its own undo history while the app is open, so switching boards doesn't wipe it */
+const shelved = new Map<string, { past: Snap[]; future: Snap[]; committed: Snap | null; committedKey: string }>();
+// automatic follow-up passes (re-layout once real card sizes are known, frame fitting) belong to the action
+// that started them: changes inside this window merge into that action's undo step
+let absorbFrom = 0, absorbUntil = 0, lastPush = 0;
+/** Start one undo step for an action and its follow-up passes (inside a running one: just extend it). */
+export function settleUndo(ms = 2500) {
+  const now = Date.now();
+  if (now < absorbUntil) { absorbUntil = Math.max(absorbUntil, now + ms); return; }
+  commitHistory(); // what you did before this is its own step
+  absorbFrom = now;
+  absorbUntil = now + ms;
+}
 const keyOf = (b: Snap) =>
   JSON.stringify([
     b.nodes.map((n) => [n.id, n.type, n.position, n.width, n.height, n.hidden, n.data]),
@@ -1468,8 +1486,10 @@ function commitHistory() {
   if (b.id !== histBoard) return;
   const key = keyOf(snapOf(b));
   if (key === committedKey) return;
-  if (committed) past.push(committed);
-  if (past.length > 100) past.shift();
+  const now = Date.now();
+  const merge = now < absorbUntil && lastPush >= absorbFrom; // a follow-up pass: fold into the step just made
+  if (committed && !merge) { past.push(committed); lastPush = now; }
+  if (past.length > UNDO_STEPS) past.shift();
   future.length = 0;
   committed = snapOf(b);
   committedKey = key;
@@ -1478,6 +1498,7 @@ function commitHistory() {
 
 function stepHistory(dir: -1 | 1) {
   commitHistory();
+  absorbUntil = 0;
   const from = dir < 0 ? past : future;
   const to = dir < 0 ? future : past;
   const snap = from.pop();
@@ -1496,11 +1517,19 @@ function stepHistory(dir: -1 | 1) {
 useStore.subscribe((s, prev) => {
   if (s.board === prev.board) return;
   if (s.board.id !== histBoard) {
+    if (histBoard) {
+      shelved.set(histBoard, { past, future, committed, committedKey });
+      if (shelved.size > 15) shelved.delete(shelved.keys().next().value!);
+    }
     histBoard = s.board.id;
-    past.length = 0;
-    future.length = 0;
+    const back = shelved.get(histBoard);
+    shelved.delete(histBoard);
+    past = back?.past ?? [];
+    future = back?.future ?? [];
     committed = snapOf(s.board);
     committedKey = keyOf(committed);
+    // the board as loaded may differ from where we left it (saved, reloaded): only resume if it is the same
+    if (back && back.committedKey !== committedKey) { past = []; future = []; }
     flags();
     return;
   }

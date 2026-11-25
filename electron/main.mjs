@@ -171,7 +171,7 @@ async function atomicWrite(file, text) {
   await fs.writeFile(tmp, text);
   await fs.rename(tmp, file);
 }
-/** Keep a few older versions of each board (at most one per 10 minutes, newest 12 kept). */
+/** Keep older versions of each board (at most one per 10 minutes, newest 48 kept: about a day of work). */
 async function backupBoard(id) {
   const file = path.join(boardsDir(), id + ".json");
   const dir = path.join(boardsDir(), ".history", id);
@@ -182,7 +182,7 @@ async function backupBoard(id) {
     const lastT = names.length ? Number(names[names.length - 1].slice(0, -5)) : 0;
     if (Date.now() - lastT < 10 * 60 * 1000) return;
     await fs.writeFile(path.join(dir, Date.now() + ".json"), old);
-    for (const n of names.slice(0, Math.max(0, names.length + 1 - 12))) await fs.rm(path.join(dir, n), { force: true });
+    for (const n of names.slice(0, Math.max(0, names.length + 1 - 48))) await fs.rm(path.join(dir, n), { force: true });
   } catch { /* no previous version yet */ }
 }
 
