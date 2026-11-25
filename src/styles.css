@@ -203,7 +203,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .dock-ask input { border: none; background: transparent; padding: 6px 4px; font-size: 14px; }
 .dock-row { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; border-top: 1px solid var(--line); padding-top: 7px; }
 .dgroup { display: flex; align-items: center; gap: 3px; }
-.dlabel { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin-right: 4px; }
+.dlabel { font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin-right: 4px; }
 .dbtn { display: inline-flex; align-items: center; gap: 5px; background: transparent; border-color: transparent; padding: 5px 9px; }
 .dbtn:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
 .dbtn .di { font-size: 14px; }
@@ -577,10 +577,10 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none; }
 .grp-head .gch { display: grid; place-items: center; transition: transform .18s ease; }
 .grp-head .gch.open { transform: rotate(90deg); }
 .grp-head .gn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.grp-head .gc { font-size: 10px; min-width: 18px; text-align: center; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--text) 10%, transparent); }
+.grp-head .gc { font-size: 11px; min-width: 18px; text-align: center; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--text) 10%, transparent); }
 .grp-menu { position: fixed; z-index: 200; width: 200px; padding: 6px; display: flex; flex-direction: column; gap: 2px; border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 12px 34px rgba(0,0,0,.4); animation: menuIn .12s ease-out; }
 @keyframes menuIn { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
-.grp-menu .grp-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); padding: 3px 8px 5px; }
+.grp-menu .grp-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); padding: 3px 8px 5px; }
 .grp-menu button { opacity: 1; width: auto; height: 30px; display: flex; align-items: center; gap: 8px; text-align: left; padding: 0 8px; font-size: 13px; color: var(--text); border-radius: 8px; background: transparent; border: none; box-shadow: none; }
 .grp-menu button span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .grp-menu button:hover { background-color: var(--hover); }
@@ -697,3 +697,23 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none; }
   cursor: grabbing;
 }
 .react-flow__node-card .card { transition: transform .12s ease, box-shadow .12s ease; }
+
+/* ---- smoother text and buttons ----
+   Small text was drawn with hard font hinting on Linux, which looks jagged ("too sharp") at 11–13px.
+   geometricPrecision turns hinting off in Chromium so glyphs keep their true, smooth shapes; antialiased does the
+   same job on macOS. Buttons ease their hover / press states instead of snapping. */
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: geometricPrecision; font-kerning: normal; }
+button, .tbtn, .ask-acts button, .ask-presets button, .ask-sug button, .ask-mode button, .lt-pick button, .board-row {
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease;
+}
+button:active:not(:disabled) { transform: translateY(.5px); }
+button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 1px; }
+/* the assistant: no text smaller than 12.5px, a little more air, softer chips */
+.ask { line-height: 1.5; }
+.ask-ctx, .ask-modes, .ask-presets button, .ask-modes .ask-mode button { font-size: 12.5px; }
+.ask-acts button, .ask-mode button, .ask-stop { font-size: 13px; }
+.ask-acts button { padding: 5px 11px; }
+.ask-acts button:hover:not(:disabled) { background: var(--hover); }
+.ask-meta, .ask-meta button { font-size: 12.5px; }
+.ask-live { font-size: 13.5px; }
+.ask-q, .ask-a { letter-spacing: .005em; }
