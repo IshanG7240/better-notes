@@ -11,13 +11,6 @@ const wrap = (rs: R[]): R => {
   const x2 = Math.max(...rs.map((r) => r.x + r.w)) + FRAME_PAD.x, y2 = Math.max(...rs.map((r) => r.y + r.h)) + FRAME_PAD.bottom;
   return { x, y, w: Math.max(x2 - x, FRAME_MIN_W), h: y2 - y };
 };
-/** wrap(), but a frame sized by hand only grows: it keeps at least the box it has now. */
-const fitTo = (n: AppNode | undefined, cur: R, rs: R[]): R => {
-  const w = wrap(rs);
-  if (!n || !isFrame(n) || !n.data.sized) return w;
-  const x = Math.min(w.x, cur.x), y = Math.min(w.y, cur.y);
-  return { x, y, w: Math.max(w.x + w.w, cur.x + cur.w) - x, h: Math.max(w.y + w.h, cur.y + cur.h) - y };
-};
 
 /**
  * Gentle, context-aware tidy. Things stay roughly where you put them:
@@ -180,7 +173,7 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
     }
 
     // 3) a frame wraps what is inside it (with a selection: only the frames the selection touches)
-    if (!root && (!fitOnly || fitOnly.has(c))) rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!)));
+    if (!root && (!fitOnly || fitOnly.has(c))) rect.set(c, wrap(items.map((id) => rect.get(id)!)));
   }
 
   const pos = new Map<string, { x: number; y: number }>();
@@ -248,6 +241,77 @@ function treeLay(comp: string[], ce: [string, string][], rect: Map<string, R>, d
 /** Gap kept around things: on the open board, and between things inside a frame. Same as tidy() so the two agree. */
 const GAP_ROOT = 56;
 const GAP_IN = 36;
+/** on the open board, things further apart than this are separate areas: evening out leaves that gap alone */
+const SEPARATE = 1200;
+
+/**
+ * Even gaps that keep the shape. Each thing is compared with the things it faces: side by side (their heights
+ * overlap) or one above the other (their widths overlap). "Overlap" is counted with the gap as slack, so two
+ * things whose corners come closer than the gap also face each other, and frames, cards and diagonal pairs are all
+ * treated alike. Each facing pair is set exactly `M` apart (closer ones pushed apart, further ones pulled together),
+ * left to right, then top to bottom, repeated until nothing moves:
+ *  - a thing moves only along the line it faces its neighbour on; everything keeps its order and its offset
+ *    sideways, so zig-zags and staggered columns stay;
+ *  - the first thing on each line (nothing before it) stays; a thing with nothing to its left moves sideways with
+ *    the thing above it (and one with nothing above moves up or down with the thing to its left), so shapes travel
+ *    together instead of being stretched;
+ *  - pinned / out-of-scope things never move; the others line up against them.
+ */
+function evenGaps(items: string[], rect: Map<string, R>, M: number, far: number, fixed: (id: string) => boolean, move: (id: string, dx: number, dy: number) => void) {
+  const pass = (ax: "x" | "y") => {
+    const o = ax === "x" ? "y" : "x", W = ax === "x" ? "w" : "h", OW = ax === "x" ? "h" : "w";
+    const sep = (a: R, b: R, k: "x" | "y", K: "w" | "h") => Math.max(b[k] - (a[k] + a[K]), a[k] - (b[k] + b[K]));
+    const mid = (r: R, k: "x" | "y", K: "w" | "h") => r[k] + r[K] / 2;
+    const preds = new Map<string, string[]>(), opreds = new Map<string, string[]>();
+    for (const id of items) { preds.set(id, []); opreds.set(id, []); }
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+      let a = items[i], b = items[j];
+      const ra = rect.get(a)!, rb = rect.get(b)!;
+      const sa = sep(ra, rb, ax, W), so = sep(ra, rb, o, OW);
+      if (sa >= M && so >= M) continue; // diagonal, with room at the corners: neither line
+      // they face each other along the axis they are further apart on (ties: side by side)
+      const along = sa > so || (sa === so && ax === "x");
+      if ((along ? sa : so) > far) continue; // a separate area
+      const k = along ? ax : o, K = along ? W : OW;
+      if (mid(ra, k, K) > mid(rb, k, K) || (mid(ra, k, K) === mid(rb, k, K) && a > b)) [a, b] = [b, a];
+      (along ? preds : opreds).get(b)!.push(a);
+    }
+    // what each thing's new place depends on: the things before it on this line, else the one it moves sideways with
+    const end = (id: string, k: "x" | "y", K: "w" | "h") => rect.get(id)![k] + rect.get(id)![K];
+    const lead = new Map<string, string>();
+    for (const id of items) {
+      if (preds.get(id)!.length) continue;
+      const op = opreds.get(id)!;
+      if (op.length) lead.set(id, op.reduce((best, p) => (end(p, o, OW) > end(best, o, OW) ? p : best)));
+    }
+    const order: string[] = [], state = new Map<string, 1 | 2>();
+    const visit = (id: string) => {
+      if (state.get(id)) return; // done, or a loop (rare): use its current place
+      state.set(id, 1);
+      for (const p of preds.get(id)!) visit(p);
+      const l = lead.get(id);
+      if (l) visit(l);
+      state.set(id, 2);
+      order.push(id);
+    };
+    for (const id of [...items].sort((a, b) => mid(rect.get(a)!, ax, W) - mid(rect.get(b)!, ax, W) || (a < b ? -1 : 1))) visit(id);
+    const shift = new Map<string, number>();
+    let moved = 0;
+    for (const id of order) {
+      let d = 0;
+      if (!fixed(id)) {
+        const ps = preds.get(id)!;
+        if (ps.length) d = Math.max(...ps.map((p) => end(p, ax, W) + M)) - rect.get(id)![ax];
+        else { const l = lead.get(id); d = l ? shift.get(l) ?? 0 : 0; }
+      }
+      if (Math.abs(d) < 0.5) d = 0;
+      shift.set(id, d);
+      if (d) { moved += Math.abs(d); ax === "x" ? move(id, d, 0) : move(id, 0, d); }
+    }
+    return moved;
+  };
+  for (let round = 0; round < 30; round++) if (pass("x") + pass("y") < 1) break;
+}
 
 /**
  * "Space out": the gentlest layout. Only things that overlap or sit closer than the gap move, and only
@@ -255,7 +319,7 @@ const GAP_IN = 36;
  * (pinned things don't move; the other side takes the whole push). Frames move as a block with
  * everything inside them, and fit snugly around their contents. Works inside-out.
  */
-export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<string, number> = new Map(), opt: { touch?: Iterable<string>; growOnly?: boolean; fitOnly?: Set<string> } = {}) {
+export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<string, number> = new Map(), opt: { touch?: Iterable<string>; growOnly?: boolean; fitOnly?: Set<string>; even?: boolean } = {}) {
   // scoped ("make room"): only pairs involving the touched things (and whatever they push) are separated, the touched
   // things hold their spot, and frames only grow. Used after a drop and after the assistant adds cards.
   const scoped = !!opt.touch;
@@ -324,7 +388,9 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
       x: Math.min(a.x + a.w + M - b.x, b.x + b.w + M - a.x),
       y: Math.min(a.y + a.h + M - b.y, b.y + b.h + M - a.y),
     });
-    // 1) relax: nudge each crowded pair apart, a little at a time, until nobody is crowded
+    // 1) "Space out" pressed: every gap evened out (see evenGaps). Otherwise: only crowded pairs are nudged apart,
+    //    a little at a time, until nobody is crowded
+    if (opt.even && !scoped) evenGaps(items, rect, M, c === "" ? SEPARATE : Infinity, fixed, move);
     for (let iter = 0; iter < 300; iter++) {
       let crowded = false;
       for (let i = 0; i < items.length; i++) {
@@ -368,7 +434,7 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
     }
     // 3) the frame fits snugly around what is inside it (grows or shrinks; the contents don't move). With a selection:
     //    only the frames the selection touches
-    if (c && (!opt.fitOnly || opt.fitOnly.has(c))) rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!)));
+    if (c && (!opt.fitOnly || opt.fitOnly.has(c))) rect.set(c, wrap(items.map((id) => rect.get(id)!)));
   }
 
   const pos = new Map<string, { x: number; y: number }>();
@@ -401,7 +467,7 @@ export function fitFrames(nodes: AppNode[], only?: Set<string>, fixedH: Map<stri
   const frames = nodes.filter((n) => isFrame(n) && !n.data.collapsed && (kids.get(n.id)?.length ?? 0) > 0).sort((a, b) => depth(b.id) - depth(a.id));
   const out = new Map<string, { x: number; y: number; width: number; height: number }>();
   for (const f of frames) {
-    const r = fitTo(f, rect.get(f.id)!, kids.get(f.id)!.map((id) => rect.get(id)!));
+    const r = wrap(kids.get(f.id)!.map((id) => rect.get(id)!));
     rect.set(f.id, r);
     if (only && !only.has(f.id)) continue;
     const s = frameSize(f as FrameNodeT);

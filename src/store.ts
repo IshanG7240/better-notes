@@ -816,7 +816,7 @@ export const useStore = create<State>()((set, get) => ({
     const blocks = visible.filter(isFrame).filter((f) => f.data.collapsed);
     const fixedH = new Map(blocks.map((f) => [f.id, COLLAPSED.h]));
     const { pos, size } = mode === "space"
-      ? spaceOut(visible, sc.fixed, fixedH, { fitOnly: sc.fitOnly })
+      ? spaceOut(visible, sc.fixed, fixedH, { fitOnly: sc.fitOnly, even: !quiet }) // pressed: even gaps; automatic: overlaps only
       : tidy(visible, flowEdges(aggregateEdges(board.nodes, board.edges)), sc.fixed, fixedH, sc.fitOnly);
     const pinNote = sc.pinned ? ` ${sc.pinned} pinned card${sc.pinned > 1 ? "s" : ""} stayed put.` : "";
     if (!pos.size && !size.size) { if (!quiet) set({ note: (mode === "space" ? "Everything already has room." : "Already lined up.") + pinNote }); return; }

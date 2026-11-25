@@ -97,7 +97,7 @@ export default function Toolbar() {
           <Btn
             icon="spread"
             label="Space out"
-            hint={{ what: "Gives every card and frame some personal space: anything overlapping or too close gets nudged apart, just enough. Frames fit snugly around their cards.", keeps: "Nothing else moves. Pinned cards stay put. With something selected: only that (and inside selected frames).", keys: "Ctrl+E" }}
+            hint={{ what: "Evens out the gaps: cards and frames next to each other end up the same distance apart (too close: pushed apart, too far: pulled together). Frames fit snugly around their cards.", keeps: "The shape: order, zig-zags and staggered columns stay; nothing is lined up in rows. Pinned cards stay put. With something selected: only that (and inside selected frames).", keys: "Ctrl+E" }}
             onClick={() => st.organizeLayout("space")}
           />
           <Btn

@@ -249,13 +249,10 @@ export function organize(cards: CardNodeT[], frames: FrameNodeT[], _edges: NoteE
     cardById.has(id)
       ? { w: cardW(cardById.get(id)!), h: fixedH.get(id) ?? fullH.get(id) ?? Math.max(cardById.get(id)!.measured?.height ?? 0, estHeight(cardById.get(id)!)) }
       : frameOuter(id);
-  // a frame's outer size around its laid-out contents (never smaller than the size you gave it by hand)
+  // a frame's outer size: snug around its laid-out contents (a frame sized by hand too: Pack trims it)
   const frameOuter = (id: string) => {
-    const b = boxes.get(id)!, f = frameById.get(id)!;
-    const w = b.w + FRAME_PAD.x * 2, h = b.h + FRAME_PAD.top + FRAME_PAD.bottom;
-    if (!f.data.sized) return { w, h };
-    const s = frameSize(f);
-    return { w: Math.max(w, s.w), h: Math.max(h, s.h) };
+    const b = boxes.get(id)!;
+    return { w: b.w + FRAME_PAD.x * 2, h: b.h + FRAME_PAD.top + FRAME_PAD.bottom };
   };
   const nowRect = (id: string): Rect => {
     const n = cardById.get(id) ?? frameById.get(id)!;

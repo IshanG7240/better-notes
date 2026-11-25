@@ -84,7 +84,7 @@ const COMMANDS: { id: AskAction | "space" | "organize" | "compact" | "frame" | "
   { id: "condense", label: "AI: condense into fewer cards", hint: "assistant", icon: "⇊" },
   { id: "split", label: "AI: split cards", hint: "assistant", icon: "✂" },
   { id: "frame", label: "New empty frame", hint: "", icon: "▢＋" },
-  { id: "space", label: "Space out (fix overlaps & gaps, nothing else moves)", hint: "Ctrl+E", icon: "↔" },
+  { id: "space", label: "Space out (even gaps, keeps the shape)", hint: "Ctrl+E", icon: "↔" },
   { id: "organize", label: "Line up (linked cards as flows, fit frames)", hint: "Ctrl+L", icon: "▦" },
   { id: "compact", label: "Pack (rearrange tightly; selected frame, else board)", hint: "Ctrl+Shift+L", icon: "▤" },
   { id: "arrange", label: "AI: arrange into sections", hint: "assistant", icon: "▦" },
@@ -353,7 +353,7 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
       <h4>Tidying up</h4>
       <p>Three layout tools, gentlest first. Frames always fit their cards afterwards, and pinned cards never move. Every tool (and every AI action) works the same way: <b>with something selected</b>, only on the selected cards and frames (and everything inside selected frames); <b>with nothing selected</b>, on the whole board. If something is left out, a note says what and why.</p>
       <ul>
-        <li><b>Space out</b> <K k="Ctrl+E" />: only nudges apart things that overlap or sit too close.</li>
+        <li><b>Space out</b> <K k="Ctrl+E" />: evens out the gaps between neighbouring cards and frames (side by side, above each other or diagonal), keeping their order and shape.</li>
         <li><b>Line up</b> <K k="Ctrl+L" />: lines up linked cards as a flow and fixes overlaps; things stay roughly in place.</li>
         <li><b>Pack</b> <K k="Ctrl+Shift+L" />: rearranges everything tightly in reading order (or just the selected frame).</li>
         <li><b>Undo:</b> <K k="Ctrl+Z" />, redo <K k="Ctrl+Shift+Z" /> or <K k="Ctrl+Y" />. Each board keeps its own history while the app is open.</li>
