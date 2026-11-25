@@ -68,7 +68,7 @@ for(const n of D.nodes){const e=document.createElement("div");e.style.left=n.x+"
  if(n.type==="frame"){e.className="frame";e.style.height=n.h+"px";e.style.setProperty("--fc",n.color);e.innerHTML="<b>"+esc(n.title||"")+"</b>";world.insertBefore(e,svg)}
  else{e.className="card";e.style.setProperty("--c",KC[n.kind]||KC.note);e.innerHTML=cardHtml(n);world.appendChild(e)}
  els.set(n.id,e)}
-function drawEdges(){const NS="http://www.w3.org/2000/svg";let h='<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b8494"/></marker></defs>';
+function drawEdges(){const NS="http://www.w3.org/2000/svg";let h='<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b8494"/></marker></defs>';
  world.querySelectorAll(".elabel").forEach(x=>x.remove());
  const box=id=>{const n=D.nodeById[id],e=els.get(id);return{x:n.x,y:n.y,w:n.w,h:n.type==="frame"?n.h:e.offsetHeight}};
  for(const ed of D.edges){const a=D.nodeById[ed.s],b=D.nodeById[ed.t];if(!a||!b)continue;const A=box(ed.s),B=box(ed.t);
