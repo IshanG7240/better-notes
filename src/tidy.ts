@@ -133,7 +133,7 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
 
 /** Gap kept around things: on the open board, and between things inside a frame. Same as tidy() so the two agree. */
 const GAP_ROOT = 56;
-const GAP_IN = 24;
+const GAP_IN = 36;
 
 /**
  * "Space out": the gentlest layout. Only things that overlap or sit closer than the gap move, and only
@@ -173,9 +173,16 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
   const fitScoped = (c: string, items: string[]) => {
     if (!c || !items.some((id) => touch.has(id))) return;
     const f = rect.get(c)!;
-    const w = wrap(items.map((id) => rect.get(id)!));
-    const g = opt.growOnly ? { x: Math.min(f.x, w.x), y: Math.min(f.y, w.y), w: 0, h: 0 } : { ...w };
-    if (opt.growOnly) { g.w = Math.max(f.x + f.w, w.x + w.w) - g.x; g.h = Math.max(f.y + f.h, w.y + w.h) - g.y; }
+    // growOnly: fit around what was touched (the rest already sits where it was meant to; don't shift the frame's edges for it)
+    const w = wrap((opt.growOnly ? items.filter((id) => touch.has(id)) : items).map((id) => rect.get(id)!));
+    let g = { ...w };
+    if (opt.growOnly) {
+      // only grow a side when something really crowds it (cards already sitting a little inside keep the edge where it is)
+      const cut = (inner: number, want: number, edge: number, pad: number, dir: 1 | -1) => (dir * (want - edge) > 0 && dir * (inner - edge) > -pad / 2 ? want : edge);
+      const x = cut(w.x + FRAME_PAD.x, w.x, f.x, FRAME_PAD.x, -1), y = cut(w.y + FRAME_PAD.top, w.y, f.y, FRAME_PAD.top, -1);
+      const r = cut(w.x + w.w - FRAME_PAD.x, w.x + w.w, f.x + f.w, FRAME_PAD.x, 1), b = cut(w.y + w.h - FRAME_PAD.bottom, w.y + w.h, f.y + f.h, FRAME_PAD.bottom, 1);
+      g = { x, y, w: r - x, h: b - y };
+    }
     if ([g.x - f.x, g.y - f.y, g.w - f.w, g.h - f.h].some((d) => Math.abs(d) >= 1)) { rect.set(c, g); touch.add(c); heavy.add(c); }
   };
 

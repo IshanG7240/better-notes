@@ -198,6 +198,9 @@ interface State {
   organizeLayout(mode?: "space", quiet?: boolean): void;
   /** after a drop or new cards: frames grow to hold them and close neighbours move aside (nothing else moves) */
   makeRoom(ids: string[]): void;
+  /** a drag ended with the cursor over `target` (a frame, or null for open canvas): what was dragged moves fully into it (or out of
+   *  frames it doesn't belong to), then makeRoom */
+  dropInto(ids: string[], target: string | null, cursor?: { x: number; y: number }): void;
   /** tight reading-order packing of the selected frame(s), else the selected cards, else the whole board */
   compactLayout(second?: boolean, only?: string[]): void;
   ghostCount(): number;
@@ -676,6 +679,61 @@ export const useStore = create<State>()((set, get) => ({
   movePositions: (pos) =>
     set((s) => ({ board: { ...s.board, nodes: s.board.nodes.map((n) => (pos.has(n.id) ? { ...n, position: pos.get(n.id)! } : n)) } })),
 
+  dropInto(ids, target, cursor) {
+    const nodes = get().board.nodes;
+    const { hidden } = collapsedOwners(nodes);
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    // what moves: the dragged things plus everything inside dragged frames
+    const moving = new Set<string>();
+    for (const id of ids) {
+      const n = byId.get(id);
+      if (!n) continue;
+      moving.add(id);
+      if (isFrame(n)) for (const d of n.data.collapsed ? nodes.filter((x) => n.data.members?.includes(x.id)) : descendants(n, nodes)) moving.add(d.id);
+    }
+    const group = [...moving].map((id) => byId.get(id)!).filter((n) => !hidden.has(n.id));
+    if (!group.length) return get().makeRoom(ids);
+    const rectOf = (n: AppNode) => { const b = boxRect(n); return { ...b, h: isCard(n) ? fullH.get(n.id) ?? Math.max(b.h, estHeight(n)) : b.h }; };
+    const rs = group.map(rectOf);
+    const box = { x: Math.min(...rs.map((r) => r.x)), y: Math.min(...rs.map((r) => r.y)), r: Math.max(...rs.map((r) => r.x + r.w)), b: Math.max(...rs.map((r) => r.y + r.h)) };
+    let dx = 0, dy = 0;
+    const others = nodes.filter((n) => isFrame(n) && !moving.has(n.id) && !hidden.has(n.id)).map((f) => ({ f, r: rectOf(f) }));
+    const T = target ? others.find((o) => o.f.id === target) ?? null : null;
+    const holds = (o: { r: { x: number; y: number; w: number; h: number } }, x: number, y: number) => x >= o.r.x && x <= o.r.x + o.r.w && y >= o.r.y && y <= o.r.y + o.r.h;
+    const isAncOrT = (o: { r: { x: number; y: number; w: number; h: number } }) => !!T && o.r.x <= T.r.x && o.r.y <= T.r.y && o.r.x + o.r.w >= T.r.x + T.r.w && o.r.y + o.r.h >= T.r.y + T.r.h;
+    for (let pass = 0; pass < 4; pass++) {
+      const bx = box.x + dx, by = box.y + dy, br = box.r + dx, bb = box.b + dy;
+      const cx = (bx + br) / 2, cy = (by + bb) / 2;
+      // inside a frame the cursor is not over: step out of it (the shortest way)
+      const wrong = others.find((o) => !isAncOrT(o) && holds(o, cx, cy));
+      if (wrong) {
+        const G = 40, r = wrong.r;
+        const opts = [r.x - G - br, r.x + r.w + G - bx].map((v) => ({ dx: v, dy: 0 })).concat([r.y - G - bb, r.y + r.h + G - by].map((v) => ({ dx: 0, dy: v })));
+        // out the side the cursor went past (else the shortest way)
+        const side = cursor && !holds(wrong, cursor.x, cursor.y)
+          ? cursor.x < r.x ? 0 : cursor.x > r.x + r.w ? 1 : cursor.y < r.y ? 2 : 3
+          : -1;
+        const best = side >= 0 ? opts[side] : opts.sort((a, b) => Math.abs(a.dx) + Math.abs(a.dy) - Math.abs(b.dx) - Math.abs(b.dy))[0];
+        dx += best.dx; dy += best.dy;
+        continue;
+      }
+      if (T) {
+        // fully inside the target, clear of its title (it grows downward / rightward if needed)
+        const r = T.r, P = FRAME_PAD;
+        const nx = Math.min(Math.max(bx, r.x + P.x), Math.max(r.x + P.x, r.x + r.w - P.x - (br - bx)));
+        const ny = Math.max(by, r.y + P.top);
+        if (nx !== bx || ny !== by) { dx += nx - bx; dy += ny - by; continue; }
+      }
+      break;
+    }
+    if (dx || dy) {
+      set((s) => ({
+        animating: true,
+        board: { ...s.board, nodes: s.board.nodes.map((n) => (moving.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n)) },
+      }));
+    }
+    get().makeRoom(ids);
+  },
   makeRoom(ids) {
     const { board } = get();
     const { hidden } = collapsedOwners(board.nodes);
@@ -1516,7 +1574,7 @@ function placeNearAnchors(fresh: CardNodeT[], edges: NoteEdge[], nodes: AppNode[
   const pm = parentMap(visible);
   const byId = new Map(visible.map((n) => [n.id, n]));
   const freshIds = new Set(fresh.map((n) => n.id));
-  const GAP = 24, SPACE = 56;
+  const GAP = 36, SPACE = 64;
   // components of new cards (joined by links between new cards), each with the existing card it hangs off
   const adj = new Map<string, string[]>();
   for (const e of edges) if (freshIds.has(e.source) && freshIds.has(e.target)) { adj.set(e.source, [...(adj.get(e.source) ?? []), e.target]); adj.set(e.target, [...(adj.get(e.target) ?? []), e.source]); }

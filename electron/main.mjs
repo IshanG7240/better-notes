@@ -593,6 +593,14 @@ function createWindow() {
             wc.sendInputEvent({ type: "mouseDown", x: a, y: b, button: "left", clickCount: 1 });
             for (let i = 1; i <= 12; i++) { wc.sendInputEvent({ type: "mouseMove", x: a + ((c - a) * i) / 12, y: b + ((d - b) * i) / 12, button: "left", modifiers: ["leftButtonDown"] }); await sleep(16); }
             wc.sendInputEvent({ type: "mouseUp", x: c, y: d, button: "left", clickCount: 1 });
+          } else if (st.hold) {
+            // drag without releasing (test the in-between state); {"up":[x,y]} releases
+            const [a, b, c, d] = st.hold;
+            wc.sendInputEvent({ type: "mouseMove", x: a, y: b });
+            wc.sendInputEvent({ type: "mouseDown", x: a, y: b, button: "left", clickCount: 1 });
+            for (let i = 1; i <= 12; i++) { wc.sendInputEvent({ type: "mouseMove", x: a + ((c - a) * i) / 12, y: b + ((d - b) * i) / 12, button: "left", modifiers: ["leftButtonDown"] }); await sleep(16); }
+          } else if (st.up) {
+            wc.sendInputEvent({ type: "mouseUp", x: st.up[0], y: st.up[1], button: "left", clickCount: 1 });
           } else if (st.modMove) {
             const [a, b, c, d] = st.modMove;
             const m = st.mods ?? ["control"];

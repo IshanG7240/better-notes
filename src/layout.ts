@@ -89,7 +89,7 @@ export function layoutNew(
 }
 
 export const COLLAPSED = { w: 260, h: 74 };
-export const FRAME_PAD = { x: 30, top: 58, bottom: 30 };
+export const FRAME_PAD = { x: 44, top: 70, bottom: 44 };
 
 export function frameSize(f: FrameNodeT) {
   return { w: f.width ?? f.measured?.width ?? 420, h: f.height ?? f.measured?.height ?? 300 };

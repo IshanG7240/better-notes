@@ -368,7 +368,50 @@ export default function Canvas() {
       items: inside.map((c) => ({ id: c.id, x: c.position.x, y: c.position.y })),
     };
   };
-  const dragging = (_: unknown, node: Node) => {
+  // ---- drop target: the innermost frame under the cursor (not the card's centre) ----
+  const dropT = useRef<{ id: string | null; skip: Set<string>; home?: string | null }>({ id: null, skip: new Set() });
+  const frameUnder = (ev: MouseEvent | TouchEvent) => {
+    const e = "touches" in ev ? ev.changedTouches[0] ?? ev.touches[0] : ev;
+    if (!e) return null;
+    const p = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    const st = useStore.getState();
+    const hid = collapsedOwners(st.board.nodes).hidden;
+    return st.board.nodes
+      .filter((n) => isFrame(n) && !n.data.collapsed && !hid.has(n.id) && !dropT.current.skip.has(n.id))
+      .map((n) => ({ n, b: boxRect(n) }))
+      .filter(({ b }) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h)
+      .sort((a, b) => a.b.w * a.b.h - b.b.w * b.b.h)[0]?.n.id ?? null;
+  };
+  const markDrop = (id: string | null) => {
+    if (dropT.current.id === id) {
+      if (id) document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.classList.add("drop-target");
+      return;
+    }
+    document.querySelectorAll(".react-flow__node.drop-target").forEach((el) => el.classList.remove("drop-target"));
+    dropT.current.id = id;
+    if (id) document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.classList.add("drop-target");
+  };
+  const dragBegin = (e: MouseEvent | TouchEvent, node: Node, dragged: Node[]) => {
+    dragStart(e, node);
+    // dragged frames (and frames inside them) can't be the target
+    const all = useStore.getState().board.nodes;
+    const skip = new Set<string>();
+    for (const d of dragged?.length ? dragged : [node]) {
+      skip.add(d.id);
+      const n = all.find((x) => x.id === d.id);
+      if (n && isFrame(n)) for (const k of descendants(n, all)) skip.add(k.id);
+    }
+    // the frame it starts in counts as "where it is": show nothing until the cursor moves somewhere else
+    const st = all.filter((n) => isFrame(n) && !skip.has(n.id)).map((n) => ({ n, b: boxRect(n) }));
+    const home = (dragged?.length ? dragged : [node]).map((d) => {
+      const r = boxRect(all.find((x) => x.id === d.id) ?? (d as AppNode)), cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+      return st.filter(({ b }) => cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h).sort((a, b) => a.b.w * a.b.h - b.b.w * b.b.h)[0]?.n.id ?? null;
+    })[0] ?? null;
+    dropT.current = { id: null, skip, home };
+  };
+  const dragging = (e: MouseEvent | TouchEvent, node: Node) => {
+    const t = frameUnder(e);
+    markDrop(t && t !== dropT.current.home ? t : null);
     const c = carry.current;
     if (!c || node.type !== "frame") return;
     const dx = node.position.x - c.start.x,
@@ -517,13 +560,17 @@ export default function Canvas() {
         }}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={48}
-        onNodeDragStart={dragStart}
+        onNodeDragStart={dragBegin}
         onNodeDrag={dragging}
-        onNodeDragStop={(_, node, dragged) => {
+        onNodeDragStop={(e, node, dragged) => {
           carry.current = null;
-          // dropped into (or next to) a frame: the frame grows to hold it and neighbours step aside
+          // the cursor decides where it lands: into the frame under the cursor (which grows to hold it), or out onto open canvas
+          const target = frameUnder(e);
+          const pt = "touches" in e ? e.changedTouches[0] : e;
+          const cursor = pt ? rf.screenToFlowPosition({ x: pt.clientX, y: pt.clientY }) : undefined;
+          markDrop(null);
           const ids = (dragged?.length ? dragged : [node]).map((n) => n.id);
-          setTimeout(() => useStore.getState().makeRoom(ids), 0);
+          setTimeout(() => useStore.getState().dropInto(ids, target, cursor), 0);
         }}
         onEdgeDoubleClick={(_, e) => useStore.getState().setEditingEdge(e.id)}
         onPaneClick={(e) => {

@@ -342,7 +342,7 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
         <li><b>Label a link:</b> double-click it. Click a link to choose its type: leads to, part of, supports, contradicts, risk for.</li>
         <li><K k="Ctrl+H" /> hides lines; <b>View</b> in the toolbar has more line options.</li>
         <li><b>Frame:</b> select cards and press <K k="Ctrl+G" />, or click <b>Frame</b> for an empty one. Click a frame's title or its empty inside to select it, drag the title to move it with everything inside, double-click the title to rename it.</li>
-        <li><b>Drop a card into a frame:</b> the frame grows to hold it and nearby cards step aside. A selection box started outside a frame also selects the frame.</li>
+        <li><b>Drop a card into a frame:</b> the frame under your mouse pointer lights up; let go and the card lands inside it, the frame grows to hold it and nearby cards step aside. Let go outside every frame and the card moves out. A selection box started outside a frame also selects the frame.</li>
         <li>A card belongs to the frame its centre is in. Frames can be collapsed into a single block.</li>
       </ul>
     </>

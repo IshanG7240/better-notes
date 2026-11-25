@@ -1,3 +1,10 @@
+## What's new in 0.1.4
+
+- **Drag cards into frames:** the frame under your mouse pointer lights up as a drop zone; let go and the card lands inside, the frame grows and nearby cards step aside. Let go outside a frame to take a card out.
+- **More room in frames:** wider padding around the edges and bigger gaps between cards.
+- **Assistant cards stay where they belong:** new cards go next to the card they came from, inside its frame, never on top of other cards.
+- **Frames are easy to select:** click the title or the empty inside; double-click the title to rename. A selection box started outside a frame selects the frame too.
+
 ## What's new in 0.1.3
 
 - **Getting started board:** opens on first launch and walks you through everything by doing it (also in the sidebar).
