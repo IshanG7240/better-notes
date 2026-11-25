@@ -68,12 +68,29 @@ async function readJson(file, fallback) {
 async function readSettings() {
   const s = await readJson(settingsFile(), {});
   let apiKey = process.env.ANTHROPIC_API_KEY || "";
-  if (s.keyEnc && safeStorage.isEncryptionAvailable()) {
+  if (s.keyEnc) {
+    const enc = Buffer.from(s.keyEnc, "base64");
     try {
-      apiKey = safeStorage.decryptString(Buffer.from(s.keyEnc, "base64"));
-    } catch {}
+      const r = await safeStorage.decryptStringAsync(enc);
+      apiKey = r.result;
+      if (r.shouldReEncrypt) await storeKey(apiKey); // the OS key was rotated: save it under the new one
+    } catch {
+      // keys saved by older versions: fall back to the old (deprecated) call once, then re-save with the new one
+      try { if (safeStorage.isEncryptionAvailable()) { apiKey = safeStorage.decryptString(enc); await storeKey(apiKey); } } catch {}
+    }
   } else if (s.keyPlain) apiKey = s.keyPlain;
   return { apiKey, model: s.model || "claude-sonnet-5-5", effort: s.effort || "medium", budget: s.budget ?? 400 };
+}
+
+/** save the API key encrypted with the OS keychain (plain text only where no keychain is available) */
+async function storeKey(key) {
+  const cur = await readJson(settingsFile(), {});
+  delete cur.keyEnc;
+  delete cur.keyPlain;
+  if (await safeStorage.isAsyncEncryptionAvailable().catch(() => false)) cur.keyEnc = (await safeStorage.encryptStringAsync(key)).toString("base64");
+  else cur.keyPlain = key;
+  await fs.mkdir(dataDir(), { recursive: true });
+  await fs.writeFile(settingsFile(), JSON.stringify(cur, null, 2), { mode: 0o600 });
 }
 
 ipcMain.handle("settings:get", async () => {
@@ -86,15 +103,9 @@ ipcMain.handle("settings:set", async (_e, patch) => {
   if (patch.model) cur.model = patch.model;
   if (patch.effort) cur.effort = patch.effort;
   if (typeof patch.budget === "number" && patch.budget >= 0) cur.budget = patch.budget;
-  if (typeof patch.apiKey === "string" && patch.apiKey.trim()) {
-    const key = patch.apiKey.trim();
-    delete cur.keyEnc;
-    delete cur.keyPlain;
-    if (safeStorage.isEncryptionAvailable()) cur.keyEnc = safeStorage.encryptString(key).toString("base64");
-    else cur.keyPlain = key;
-  }
   await fs.mkdir(dataDir(), { recursive: true });
   await fs.writeFile(settingsFile(), JSON.stringify(cur, null, 2), { mode: 0o600 });
+  if (typeof patch.apiKey === "string" && patch.apiKey.trim()) await storeKey(patch.apiKey.trim());
   return true;
 });
 
