@@ -64,6 +64,8 @@ function LabelEdge(p: EdgeProps) {
   return (
     <>
       <BaseEdge id={p.id} path={path} markerEnd={p.markerEnd} interactionWidth={22} className={`le-${st || "n"} lt-${explicit ? lt : "auto"}${d.del ? " le-del" : ""}`} />
+      {/* a soft highlight flowing along the line, from the card it starts at to the card it points to (links with an arrow) */}
+      {p.markerEnd && !d.del && <path d={path} className={`edge-flow le-${st || "n"} lt-${explicit ? lt : "auto"}${p.selected ? " sel" : ""}`} />}
       {show && (
         <EdgeLabelRenderer>
           <div

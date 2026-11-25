@@ -104,6 +104,19 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .react-flow__minimap { background: var(--panel) !important; border: 1px solid var(--line); border-radius: 10px; -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
 .react-flow__edge-path { stroke: var(--muted); stroke-width: 1.7; opacity: var(--line-op, .8); }
 .react-flow__edge.selected .react-flow__edge-path { stroke: var(--accent); opacity: 1; }
+/* flowing lines: short soft streaks drift along each link toward the card it points to, like water in a pipe.
+   Off in View → Flowing lines, and for people who ask their system for less motion. */
+.edge-flow { fill: none; stroke: var(--accent); stroke-width: 3; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-dasharray: 16 54; opacity: var(--line-op, .8); filter: drop-shadow(0 0 3px var(--accent)); pointer-events: none; animation: edge-flow 2s linear infinite; }
+@keyframes edge-flow { from { stroke-dashoffset: 70; } to { stroke-dashoffset: 0; } }
+.edge-flow.le-hot, .edge-flow.sel { opacity: .95; animation-duration: 1.4s; }
+.edge-flow.le-dim { opacity: 0; animation: none; }
+.edge-flow.lt-supports { stroke: #5fb98a; }
+.edge-flow.lt-contradicts { stroke: #e0707a; }
+.edge-flow.lt-risk_for { stroke: #e39a55; }
+.edge-flow.lt-relates { display: none; }
+:root[data-flow="off"] .edge-flow { display: none; }
+.canvas.moving .edge-flow { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .edge-flow { animation: none; display: none; } }
 .edge-ghost .react-flow__edge-path { stroke-dasharray: 6 5; stroke: var(--accent); opacity: .85; }
 .react-flow__selection { background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid var(--accent); }
 .react-flow__nodesselection-rect { border: 1px dashed var(--accent); }

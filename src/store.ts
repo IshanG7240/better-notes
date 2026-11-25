@@ -146,6 +146,9 @@ interface State {
   setEdgeStyle(m: EdgeStyle): void;
   labelsOnFocus: boolean;
   setLabelsOnFocus(b: boolean): void;
+  /** links show a soft highlight flowing from the card they start at to the card they point to */
+  flowLines: boolean;
+  setFlowLines(b: boolean): void;
   hoverId: string | null;
   setHover(id: string | null): void;
   toggleCollapse(frameId: string): void;
@@ -322,6 +325,8 @@ export const useStore = create<State>()((set, get) => ({
     setPref("edgeStyle", m);
     set({ edgeStyle: m });
   },
+  flowLines: (() => { const v = pref("flowLines", true); document.documentElement.dataset.flow = v ? "on" : "off"; return v; })(),
+  setFlowLines(b) { setPref("flowLines", b); document.documentElement.dataset.flow = b ? "on" : "off"; set({ flowLines: b }); },
   labelsOnFocus: pref("labelsOnFocus", false),
   setLabelsOnFocus(b) {
     setPref("labelsOnFocus", b);

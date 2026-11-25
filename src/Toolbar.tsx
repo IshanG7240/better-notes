@@ -71,6 +71,7 @@ export default function Toolbar() {
   const lineMode = useStore((s) => s.lineMode);
   const edgeStyle = useStore((s) => s.edgeStyle);
   const labelsOnFocus = useStore((s) => s.labelsOnFocus);
+  const flowLines = useStore((s) => s.flowLines);
   const showMap = useStore((s) => s.showMap);
   const [q, setQ] = useState("");
   const canvas = view === "canvas";
@@ -139,6 +140,7 @@ export default function Toolbar() {
                 <button title="Fit each card's width to its longest line (360–800 px)" onClick={() => st.autoFitWidth()}>Auto-fit</button>
               </span>
             </div>
+            <label className="pop-check"><input type="checkbox" checked={flowLines} onChange={(e) => st.setFlowLines(e.target.checked)} /> Flowing lines (show which way links go)</label>
             <label className="pop-check"><input type="checkbox" checked={labelsOnFocus} onChange={(e) => st.setLabelsOnFocus(e.target.checked)} /> Show labels only for the focused card</label>
             <label className="pop-check"><input type="checkbox" checked={showMap} onChange={(e) => st.setShowMap(e.target.checked)} /> Show minimap</label>
           </Pop>
