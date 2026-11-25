@@ -34,6 +34,7 @@ import {
   type View,
 } from "./types";
 import { sampleBoard } from "./sample";
+import { guideBoard, GUIDE_NAME } from "./guide";
 import { aggregateEdges, collapsedOwners } from "./lines";
 import { spawnPoint } from "./spawn";
 import { CARD_W, setCardDefault, cardW, FRAME_PAD, boxRect, descendants, estHeight, frameSize, layoutNew, membersOf, organize, COLLAPSED, parentMap, readingOrder } from "./layout";
@@ -100,7 +101,9 @@ interface State {
   error: string | null;
   note: string | null;
   doc: string | null;
-  modal: null | "palette" | "settings";
+  modal: null | "palette" | "settings" | "help";
+  /** the next fit zooms to just these nodes */
+  fitOnly: string[] | null;
   askDraft: string;
   searchOpen: boolean;
   searchQ: string;
@@ -161,6 +164,7 @@ interface State {
   saveNow(): Promise<void>;
   newBoard(): Promise<void>;
   addSampleBoard(): Promise<void>;
+  addGuideBoard(): Promise<void>;
   openBoard(id: string): Promise<void>;
   deleteBoard(id: string): Promise<void>;
   setBoardGroup(id: string, name: string): Promise<void>;
@@ -286,6 +290,7 @@ export const useStore = create<State>()((set, get) => ({
   note: null,
   doc: null,
   modal: null,
+  fitOnly: null,
   askDraft: "",
   searchOpen: false,
   searchQ: "",
@@ -382,7 +387,7 @@ export const useStore = create<State>()((set, get) => ({
     document.documentElement.style.setProperty("--fs", String(v));
     set({ fontScale: v });
   },
-  theme: pref<Theme>("theme", "dusk"),
+  theme: pref<Theme>("theme", "light"),
   view: pref<View>("view", "canvas"),
   sidebarOpen: pref("sidebarOpen", true),
   sidebarW: pref("sidebarW", 210),
@@ -411,6 +416,15 @@ export const useStore = create<State>()((set, get) => ({
     const settings = await window.api.settings.get();
     set({ settings, usage: await window.api.usage.get() });
     let boards = await window.api.boards.list();
+    let guide: Board | null = null;
+    if (!pref("guideSeeded", false)) {
+      // one-time (first launch, or the first launch after an update): the Getting started board, opened
+      setPref("guideSeeded", true);
+      guide = { id: uid(), name: GUIDE_NAME, ...guideBoard(), updatedAt: Date.now() + 2000 };
+      await window.api.boards.save(guide);
+      if (boards.length) set({ note: "New: a Getting started board (in the sidebar), and press ? any time for help." });
+      boards = await window.api.boards.list();
+    }
     if (!boards.length) {
       const b: Board = { id: uid(), name: "My first board", ...welcome(), updatedAt: Date.now() };
       await window.api.boards.save(b);
@@ -427,6 +441,7 @@ export const useStore = create<State>()((set, get) => ({
       first = sb;
       seeded = true;
     }
+    if (guide) { first = guide; seeded = true; set({ fitOnly: ["gf0", "gf1"] }); }
     set((st) => ({ boards, board: first!, fitTick: st.fitTick + 1 }));
     if (seeded) setTimeout(() => get().organizeLayout(), 1200); // sample positions predate the wider default cards
     if (!settings.hasKey) set({ modal: "settings" });
@@ -446,6 +461,15 @@ export const useStore = create<State>()((set, get) => ({
     const b: Board = { id: uid(), name: "Untitled", nodes: [], edges: [], updatedAt: Date.now() };
     await window.api.boards.save(b);
     set({ board: b, boards: await window.api.boards.list() });
+  },
+  async addGuideBoard() {
+    await stopAskForSwitch(get);
+    await get().saveNow();
+    const gb: Board = { id: uid(), name: GUIDE_NAME, ...guideBoard(), updatedAt: Date.now() };
+    await window.api.boards.save(gb);
+    set((st) => ({ board: gb, modal: null, fitOnly: ["gf0", "gf1"], fitTick: st.fitTick + 1 }));
+    set({ boards: await window.api.boards.list() });
+    setTimeout(() => get().organizeLayout(), 1200);
   },
   async addSampleBoard() {
     await stopAskForSwitch(get);

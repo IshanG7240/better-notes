@@ -8,7 +8,7 @@ import Toolbar from "./Toolbar";
 import { Icon } from "./icons";
 import ChatPanel from "./ChatPanel";
 import AskPanel from "./AskPanel";
-import { DocView, Palette, SettingsModal, Toasts, UsageChip } from "./Modals";
+import { DocView, HelpModal, Palette, SettingsModal, Toasts, UsageChip } from "./Modals";
 import { persistBoard, useStore } from "./store";
 import { THEMES, type Theme } from "./types";
 import { toMarkdown } from "./outlineTree";
@@ -48,8 +48,8 @@ function Resizer({ side, width, min, max, onChange }: { side: "left" | "right"; 
 
 function Sidebar() {
   // narrow selectors: a whole-store subscription re-rendered this on every hover / drag tick
-  const { boards, newBoard, addSampleBoard, openBoard, deleteBoard, rename, setBoardGroup } = useStore(
-    useShallow((s) => ({ setBoardGroup: s.setBoardGroup, boards: s.boards, newBoard: s.newBoard, addSampleBoard: s.addSampleBoard, openBoard: s.openBoard, deleteBoard: s.deleteBoard, rename: s.rename })),
+  const { boards, newBoard, addSampleBoard, addGuideBoard, openBoard, deleteBoard, rename, setBoardGroup } = useStore(
+    useShallow((s) => ({ setBoardGroup: s.setBoardGroup, boards: s.boards, newBoard: s.newBoard, addSampleBoard: s.addSampleBoard, addGuideBoard: s.addGuideBoard, openBoard: s.openBoard, deleteBoard: s.deleteBoard, rename: s.rename })),
   );
   const board = useStore(useShallow((s) => ({ id: s.board.id, name: s.board.name })));
   const [armed, setArmed] = useState<string | null>(null);
@@ -121,6 +121,7 @@ function Sidebar() {
       <div className="side-head">
         <span>Boards</span>
         <span className="side-btns">
+          <button className="sb-ic" onClick={addGuideBoard} title="Add the Getting started board (a hands-on guide)"><Icon name="help" size={15} /></button>
           <button className="sb-ic" onClick={addSampleBoard} title="Add the sample architecture board"><Icon name="sparkle" size={15} /></button>
           <button className="sb-ic" onClick={newBoard} title="New board"><Icon name="plus" size={15} /></button>
         </span>
@@ -272,6 +273,7 @@ export default function App() {
         )}
         {modal === "palette" && <Palette />}
         {modal === "settings" && <SettingsModal />}
+        {modal === "help" && <HelpModal />}
         <DocView />
       </div>
     </ReactFlowProvider>

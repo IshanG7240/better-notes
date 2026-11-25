@@ -1,3 +1,11 @@
+## What's new in 0.1.3
+
+- **Getting started board:** opens on first launch and walks you through everything by doing it (also in the sidebar).
+- **Guide:** press **?** or **F1**, or click **?** in the toolbar: basics, notes, links and frames, layout tools, the AI assistant, all shortcuts.
+- **Works without an API key:** the settings window can be skipped; everything except the AI works.
+- **Undo:** 200 steps, kept per board while the app is open; a layout tool or an assistant answer is one step.
+- Light theme by default; empty boards show what to do next.
+
 ## What's new in 0.1.2
 
 - **Frames fit their cards** after every layout tool (Space out, Line up, Pack), also frames that hold a pinned card.

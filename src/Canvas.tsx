@@ -152,7 +152,11 @@ export default function Canvas() {
   const [menu, setMenu] = useState<{ x: number; y: number; fx: number; fy: number } | null>(null);
 
   useEffect(() => {
-    if (fitTick) setTimeout(() => rf.fitView({ padding: 0.25, maxZoom: 1, duration: 500 }), 50);
+    if (!fitTick) return;
+    // fitOnly: zoom to just these nodes (e.g. the first frames of the Getting started board) instead of everything
+    const only = useStore.getState().fitOnly;
+    if (only) useStore.setState({ fitOnly: null });
+    setTimeout(() => rf.fitView({ padding: only ? 0.12 : 0.25, maxZoom: 1, duration: 500, ...(only ? { nodes: only.map((id) => ({ id })) } : {}) }), 50);
   }, [fitTick, rf]);
 
   // ---- keyboard / paste ----
@@ -211,6 +215,12 @@ export default function Canvas() {
         st.groupSelection();
         return;
       }
+      if (!term && (e.key === "F1" || (e.key === "?" && !isTyping(e.target) && !e.ctrlKey && !e.metaKey))) {
+        e.preventDefault();
+        if (!e.repeat) st.setModal(e.key === "F1" && st.modal === "help" ? null : "help");
+        return;
+      }
+      if (e.key === "Escape" && st.modal === "help") { st.setModal(null); return; }
       if (st.modal || isTyping(e.target) || term) return;
       const sel = st.board.nodes.filter((n) => n.selected && isCard(n));
       const selEdge = st.board.edges.find((x) => x.selected);
@@ -536,6 +546,14 @@ export default function Canvas() {
           maskColor="var(--minimask)"
         />}
       </ReactFlow>
+      {!board.nodes.length && (
+        <div className="empty-hint">
+          <div className="eh-title">An empty board</div>
+          <div>Double-click anywhere to add a card, or press <kbd>N</kbd></div>
+          <div>Paste a long text to turn it into cards</div>
+          <button className="eh-help" onClick={() => useStore.getState().setModal("help")}>Press <kbd>?</kbd> for the guide</button>
+        </div>
+      )}
       {marquee && (
         <div className="marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />
       )}

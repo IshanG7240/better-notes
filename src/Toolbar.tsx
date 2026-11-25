@@ -151,6 +151,7 @@ export default function Toolbar() {
         </>
       )}
       <div className="tb-right">
+        <Btn icon="help" tip="Guide: how everything works · ? or F1" onClick={() => st.setModal("help")} />
         <Btn icon="doc" label="Share" tip="Save a read-only copy as a single web page you can open in any browser or on your phone" onClick={() => shareBoard()} />
       {ghosts > 0 && (
         <div className="ghostbar">
