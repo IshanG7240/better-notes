@@ -1,3 +1,8 @@
+## What's new in 0.1.5
+
+- **Shared pages open instantly:** a board with **bold**, *italic* or ~~struck~~ text no longer freezes the browser. Pages shared from older versions still have the problem, so share them again.
+- **Easier to move around a shared page:** two-finger scroll on a touchpad pans, like in the app (pinch or a mouse wheel zooms), and dragging on a frame moves the board instead of selecting its title.
+
 ## What's new in 0.1.4
 
 - **Drag cards into frames:** the frame under your mouse pointer lights up as a drop zone; let go and the card lands inside, the frame grows and nearby cards step aside. Let go outside a frame to take a card out.
