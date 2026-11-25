@@ -6,8 +6,14 @@ export let CARD_W = 480;
 export const setCardDefault = (w: number) => { CARD_W = w; };
 /** a card's width: its own (resized) width, else the default */
 export const cardW = (n: { width?: number | null }) => n.width ?? CARD_W;
-export const estHeight = (n: CardNodeT) =>
-  n.measured?.height ?? 70 + Math.max(1, n.data.bullets.split("\n").filter(Boolean).length) * 30;
+/** A card's full-detail height, guessed from its text (wrapped at its width) before it has been seen at full detail. */
+export const guessHeight = (n: { width?: number | null; data: CardNodeT["data"] }) => {
+  const perLine = Math.max(24, Math.floor((cardW(n) - 44) / 7.4));
+  const lines = n.data.bullets.split("\n").filter((l) => l.trim()).reduce((t, l) => t + Math.max(1, Math.ceil(l.trim().length / perLine)), 0);
+  const titleLines = Math.max(1, Math.ceil((n.data.title.length || 1) / Math.max(20, perLine - 8)));
+  return 44 + titleLines * 24 + (n.data.kind === "idea" || n.data.kind === "note" ? 0 : 24) + Math.max(1, lines) * 28;
+};
+export const estHeight = (n: CardNodeT) => n.measured?.height ?? guessHeight(n);
 
 /**
  * Lay out `fresh` nodes (positions ignored) and return top-left positions.

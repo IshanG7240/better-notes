@@ -57,7 +57,8 @@ const SECTIONS: [string, C[]][] = [
     ["task", "Put cards in a frame", [
       "- [ ] Shift+drag on empty canvas to select several cards",
       "- [ ] Press Ctrl+G to put them in a frame",
-      "Drag a frame by its title: everything inside moves with it",
+      "Drag a frame by its title: everything inside moves with it; double-click the title to rename it",
+      "Drop a card into a frame and the frame makes room for it",
       "Or click **Frame** in the toolbar for an empty one",
     ]],
   ]],

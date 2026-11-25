@@ -37,7 +37,7 @@ import { sampleBoard } from "./sample";
 import { guideBoard, GUIDE_NAME } from "./guide";
 import { aggregateEdges, collapsedOwners } from "./lines";
 import { spawnPoint } from "./spawn";
-import { CARD_W, setCardDefault, cardW, FRAME_PAD, boxRect, descendants, estHeight, frameSize, layoutNew, membersOf, organize, COLLAPSED, parentMap, readingOrder } from "./layout";
+import { CARD_W, setCardDefault, cardW, FRAME_PAD, boxRect, descendants, estHeight, guessHeight, frameSize, layoutNew, membersOf, organize, COLLAPSED, parentMap, readingOrder } from "./layout";
 import { fullH } from "./heights";
 import { spaceOut, tidy, fitFrames } from "./tidy";
 import { flowEdges, isLinkType, type LinkType } from "./linktypes";
@@ -196,6 +196,8 @@ interface State {
   movePositions(pos: Map<string, { x: number; y: number }>): void;
   /** "Line up" (default): keep places, flow linked clusters, push overlaps apart, fit frames. "space": only un-crowd, frames only grow */
   organizeLayout(mode?: "space", quiet?: boolean): void;
+  /** after a drop or new cards: frames grow to hold them and close neighbours move aside (nothing else moves) */
+  makeRoom(ids: string[]): void;
   /** tight reading-order packing of the selected frame(s), else the selected cards, else the whole board */
   compactLayout(second?: boolean, only?: string[]): void;
   ghostCount(): number;
@@ -674,6 +676,39 @@ export const useStore = create<State>()((set, get) => ({
   movePositions: (pos) =>
     set((s) => ({ board: { ...s.board, nodes: s.board.nodes.map((n) => (pos.has(n.id) ? { ...n, position: pos.get(n.id)! } : n)) } })),
 
+  makeRoom(ids) {
+    const { board } = get();
+    const { hidden } = collapsedOwners(board.nodes);
+    const visible = board.nodes.filter((n) => !hidden.has(n.id));
+    const touch = ids.filter((id) => visible.some((n) => n.id === id));
+    if (!touch.length) return;
+    const pm = parentMap(visible);
+    const locked = new Set<string>();
+    for (const n of visible) {
+      if (!(isCard(n) && n.data.pinned)) continue;
+      locked.add(n.id);
+      for (let p = pm.get(n.id); p; p = pm.get(p)) locked.add(p);
+    }
+    for (const id of touch) locked.delete(id); // what you just moved may still make room for itself
+    const fixedH = new Map(visible.filter(isFrame).filter((f) => f.data.collapsed).map((f) => [f.id, COLLAPSED.h]));
+    const { pos, size } = spaceOut(visible, locked, fixedH, { touch, growOnly: true });
+    if (!pos.size && !size.size) return;
+    const blocks = visible.filter(isFrame).filter((f) => f.data.collapsed);
+    const shift = new Map<string, { dx: number; dy: number }>();
+    for (const f of blocks) { const np = pos.get(f.id); if (np) for (const m of f.data.members ?? []) shift.set(m, { dx: np.x - f.position.x, dy: np.y - f.position.y }); }
+    set((s) => ({
+      animating: true,
+      board: {
+        ...s.board,
+        nodes: s.board.nodes.map((n) => {
+          const p = pos.get(n.id), z = size.get(n.id), sh = shift.get(n.id);
+          if (!p && !z && !sh) return n;
+          return { ...n, ...(p ? { position: p } : sh ? { position: { x: n.position.x + sh.dx, y: n.position.y + sh.dy } } : {}), ...(z ?? {}) } as AppNode;
+        }),
+      },
+    }));
+    setTimeout(() => set({ animating: false }), 450);
+  },
   organizeLayout(mode, quiet) {
     settleUndo();
     const { board } = get();
@@ -1450,14 +1485,90 @@ function applyOps(ops: GraphOps, set: (p: Partial<State> | ((s: State) => Partia
     if (freshIds.has(e.target) && !freshIds.has(e.source)) anchorIds.add(e.source);
   }
   const anchors = cards.filter((n) => anchorIds.has(n.id));
+  let grown = new Map<string, { x: number; y: number; width: number; height: number }>();
   if (fresh.length) {
     const pos = layoutNew(fresh, edges, anchors, cards);
     for (const n of fresh) n.position = pos.get(n.id) ?? n.position;
+    if (anchors.length) grown = placeNearAnchors(fresh, edges, board.nodes);
   }
   set((s) => ({
-    board: { ...s.board, nodes: [...s.board.nodes.map((n) => ({ ...n, selected: false })), ...fresh], edges: [...s.board.edges, ...edges] },
+    board: {
+      ...s.board,
+      nodes: [...s.board.nodes.map((n) => { const g = grown.get(n.id); return g ? ({ ...n, selected: false, position: { x: g.x, y: g.y }, width: g.width, height: g.height } as AppNode) : { ...n, selected: false }; }), ...fresh],
+      edges: [...s.board.edges, ...edges],
+    },
   }));
-  return fresh.map((n) => n.id);
+  // once the new cards have real sizes: frames grow to hold them, neighbours step aside
+  const ids = fresh.map((n) => n.id);
+  if (ids.length) { setTimeout(() => get().makeRoom(ids), 450); setTimeout(() => get().makeRoom(ids), 1300); }
+  return ids;
+}
+
+/**
+ * Put new cards next to the card they belong to, never on top of other things:
+ * - the anchor sits in a frame: the new cards go inside that frame, under what is already there, and the frame grows;
+ * - otherwise: a free spot to the right of the anchor (then below / further right), clear of every card and frame.
+ * New cards that only link to other new cards travel with them. Returns the new boxes of frames that grew.
+ */
+function placeNearAnchors(fresh: CardNodeT[], edges: NoteEdge[], nodes: AppNode[]) {
+  const { hidden } = collapsedOwners(nodes);
+  const visible = nodes.filter((n) => !hidden.has(n.id));
+  const pm = parentMap(visible);
+  const byId = new Map(visible.map((n) => [n.id, n]));
+  const freshIds = new Set(fresh.map((n) => n.id));
+  const GAP = 24, SPACE = 56;
+  // components of new cards (joined by links between new cards), each with the existing card it hangs off
+  const adj = new Map<string, string[]>();
+  for (const e of edges) if (freshIds.has(e.source) && freshIds.has(e.target)) { adj.set(e.source, [...(adj.get(e.source) ?? []), e.target]); adj.set(e.target, [...(adj.get(e.target) ?? []), e.source]); }
+  const anchorOf = (id: string) => { for (const e of edges) { if (e.source === id && byId.has(e.target) && isCard(byId.get(e.target)!)) return e.target; if (e.target === id && byId.has(e.source) && isCard(byId.get(e.source)!)) return e.source; } return null; };
+  const seen = new Set<string>();
+  const taken: { x: number; y: number; w: number; h: number }[] = visible.map(boxRect);
+  const grown = new Map<string, { x: number; y: number; width: number; height: number }>();
+  const hits = (r: { x: number; y: number; w: number; h: number }, m: number) => taken.some((o) => r.x < o.x + o.w + m && o.x < r.x + r.w + m && r.y < o.y + o.h + m && o.y < r.y + r.h + m);
+  for (const start of fresh) {
+    if (seen.has(start.id)) continue;
+    const comp: CardNodeT[] = [];
+    const stack = [start.id];
+    while (stack.length) { const x = stack.pop()!; if (seen.has(x)) continue; seen.add(x); comp.push(fresh.find((f) => f.id === x)!); stack.push(...(adj.get(x) ?? [])); }
+    comp.sort((a, b) => fresh.indexOf(a) - fresh.indexOf(b));
+    const anchorId = comp.map((c) => anchorOf(c.id)).find(Boolean);
+    const anchor = anchorId ? byId.get(anchorId)! : null;
+    if (!anchor) continue; // nothing to sit next to: keep the default spot (right of the board)
+    const w = Math.max(...comp.map(cardW));
+    const hs = comp.map((c) => guessHeight(c));
+    const h = hs.reduce((t, x) => t + x, 0) + GAP * (comp.length - 1);
+    const frameId = pm.get(anchor.id);
+    let x: number, y: number;
+    if (frameId) {
+      // inside the anchor's frame, under everything already in it
+      const f = byId.get(frameId) as FrameNodeT;
+      const fb = grown.get(frameId) ?? (() => { const r = boxRect(f); return { x: r.x, y: r.y, width: r.w, height: r.h }; })();
+      const inside = visible.filter((n) => n.id !== frameId && pm.get(n.id) === frameId).map(boxRect);
+      const placedHere = taken.filter((t) => (t as { f?: string }).f === frameId); // new cards already put in this frame
+      const bottom = Math.max(fb.y + FRAME_PAD.top - GAP, ...inside.map((r) => r.y + r.h), ...placedHere.map((r) => r.y + r.h));
+      x = boxRect(anchor).x;
+      y = bottom + GAP;
+      const right = Math.max(fb.x + fb.width, x + w + FRAME_PAD.x), low = y + h + FRAME_PAD.bottom;
+      grown.set(frameId, { x: fb.x, y: fb.y, width: right - fb.x, height: Math.max(fb.height, low - fb.y) });
+    } else {
+      const a = boxRect(anchor);
+      let spot: { x: number; y: number } | null = null;
+      for (let col = 0; col < 12 && !spot; col++) {
+        for (let k = 0; k < 60 && !spot; k++) {
+          const cand = { x: a.x + a.w + 110 + col * (w + 110), y: a.y + k * 40, w, h };
+          if (!hits(cand, SPACE)) spot = cand;
+        }
+      }
+      ({ x, y } = spot ?? { x: Math.max(...taken.map((t) => t.x + t.w)) + 200, y: a.y });
+    }
+    let cy = y;
+    comp.forEach((c, i) => {
+      c.position = { x, y: cy };
+      taken.push(Object.assign({ x, y: cy, w: cardW(c), h: hs[i] }, frameId ? { f: frameId } : {}));
+      cy += hs[i] + GAP;
+    });
+  }
+  return grown;
 }
 
 export { membersOf, frameSize };

@@ -141,7 +141,12 @@ const GAP_IN = 24;
  * (pinned things don't move; the other side takes the whole push). Frames move as a block with
  * everything inside them, and fit snugly around their contents. Works inside-out.
  */
-export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<string, number> = new Map()) {
+export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<string, number> = new Map(), opt: { touch?: Iterable<string>; growOnly?: boolean } = {}) {
+  // scoped ("make room"): only pairs involving the touched things (and whatever they push) are separated, the touched
+  // things hold their spot, and frames only grow. Used after a drop and after the assistant adds cards.
+  const scoped = !!opt.touch;
+  const touch = new Set(opt.touch ?? []);
+  const heavy = new Set(touch);
   const pm = parentMap(nodes);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const rect = new Map<string, R>();
@@ -164,12 +169,35 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
     }
   };
   const containers = ["", ...nodes.filter((n) => isFrame(n) && !n.data.collapsed).map((n) => n.id)].sort((a, b) => (b ? depth(b) + 1 : 0) - (a ? depth(a) + 1 : 0));
+  // scoped: a frame with something touched inside grows to hold it; if it grew, it pushes its neighbours (and holds its spot)
+  const fitScoped = (c: string, items: string[]) => {
+    if (!c || !items.some((id) => touch.has(id))) return;
+    const f = rect.get(c)!;
+    const w = wrap(items.map((id) => rect.get(id)!));
+    const g = opt.growOnly ? { x: Math.min(f.x, w.x), y: Math.min(f.y, w.y), w: 0, h: 0 } : { ...w };
+    if (opt.growOnly) { g.w = Math.max(f.x + f.w, w.x + w.w) - g.x; g.h = Math.max(f.y + f.h, w.y + w.h) - g.y; }
+    if ([g.x - f.x, g.y - f.y, g.w - f.w, g.h - f.h].some((d) => Math.abs(d) >= 1)) { rect.set(c, g); touch.add(c); heavy.add(c); }
+  };
 
   for (const c of containers) {
     const items = kids.get(c) ?? [];
     if (!items.length) continue;
     const M = c === "" ? GAP_ROOT : GAP_IN;
     const fixed = (id: string) => locked.has(id);
+    const isFr = (id: string) => isFrame(byId.get(id)!);
+    // share of the push that `a` takes (b takes the rest); null: neither may move
+    const shareOf = (a: string, b: string): number | null => {
+      if (fixed(a) && fixed(b)) return null;
+      if (fixed(a)) return 0;
+      if (fixed(b)) return 1;
+      if (scoped) {
+        if (isFr(a) !== isFr(b)) return isFr(a) ? 0 : 1; // a card makes way for a frame, not the other way round
+        if (heavy.has(a) && heavy.has(b)) return null;
+        if (heavy.has(a)) return 0;
+        if (heavy.has(b)) return 1;
+      }
+      return 0.5;
+    };
     // how far a and b must separate on each axis to keep the gap (<= 0: they already have room)
     const need = (a: R, b: R) => ({
       x: Math.min(a.x + a.w + M - b.x, b.x + b.w + M - a.x),
@@ -181,7 +209,9 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
       for (let i = 0; i < items.length; i++) {
         for (let j = i + 1; j < items.length; j++) {
           const a = items[i], b = items[j];
-          if (fixed(a) && fixed(b)) continue;
+          if (scoped && !touch.has(a) && !touch.has(b)) continue;
+          const share = shareOf(a, b);
+          if (share === null) continue;
           const ra = rect.get(a)!, rb = rect.get(b)!;
           const n = need(ra, rb);
           if (n.x <= 0.5 || n.y <= 0.5) continue;
@@ -191,14 +221,16 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
           const ca = horiz ? ra.x + ra.w / 2 : ra.y + ra.h / 2, cb = horiz ? rb.x + rb.w / 2 : rb.y + rb.h / 2;
           const sign = cb >= ca ? 1 : -1; // b goes this way, a the other
           const d = horiz ? n.x : n.y;
-          const shareA = fixed(a) ? 0 : fixed(b) ? 1 : 0.5;
+          const shareA = share;
           const da = -sign * d * shareA, db = sign * d * (1 - shareA);
+          if (scoped) { if (da) touch.add(a); if (db) touch.add(b); }
           if (horiz) { move(a, da, 0); move(b, db, 0); } else { move(a, 0, da); move(b, 0, db); }
         }
       }
       if (!crowded) break;
     }
     // 2) safety net for knots the relaxation didn't untie: greedy push in reading order
+    if (scoped) { fitScoped(c, items); continue; }
     const order = readingOrder(items.map((id) => ({ id, ...rect.get(id)! })));
     const placed: string[] = items.filter(fixed);
     for (const id of order) {

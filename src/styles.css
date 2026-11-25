@@ -645,3 +645,7 @@ body.panning, body.panning * { cursor: grabbing !important; user-select: none; }
 }
 .empty-hint .eh-title { font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
 .empty-hint .eh-help { pointer-events: auto; margin-top: 6px; border: 1px solid var(--line); background: var(--panel); padding: 7px 14px; border-radius: 10px; color: var(--text); }
+
+.frame-label { cursor: grab; user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.frame-label.empty { color: color-mix(in srgb, var(--fc) 50%, transparent); }
+.react-flow__node-frame.selected .frame { border-color: var(--fc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--fc) 35%, transparent); }

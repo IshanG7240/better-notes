@@ -8,9 +8,10 @@ import { KindPicker } from "./KindPicker";
 import { useStore } from "./store";
 import { Notes, Title } from "./Editable";
 import { MdLines } from "./md";
+import { guessHeight } from "./layout";
 import { matcher } from "./search";
 
-function CardNode({ id, data, selected }: NodeProps<CardNodeT>) {
+function CardNode({ id, data, selected, width }: NodeProps<CardNodeT>) {
   const update = useStore((s) => s.updateData);
   const accept = useStore((s) => s.acceptGhosts);
   const reject = useStore((s) => s.rejectGhosts);
@@ -34,7 +35,7 @@ function CardNode({ id, data, selected }: NodeProps<CardNodeT>) {
   const count = data.bullets.split("\n").filter((l) => l.trim()).length;
 
   return (
-    <div ref={ref} className={`card kind-${data.kind}${selected ? " selected" : ""}${data.ghost ? " ghost" : ""}${data.pinned ? " pinned" : ""}${data.del ? " del" : ""}${data.proposal ? " prop" : ""}${touched ? " ai-touch" : ""}${hit === 1 ? " s-hit" : hit === 2 ? " s-dim" : ""}`} style={{ width: "100%", ["--cfs" as string]: data.fs ?? 1, minHeight: compact ? fullH.get(id) : undefined }}>
+    <div ref={ref} className={`card kind-${data.kind}${selected ? " selected" : ""}${data.ghost ? " ghost" : ""}${data.pinned ? " pinned" : ""}${data.del ? " del" : ""}${data.proposal ? " prop" : ""}${touched ? " ai-touch" : ""}${hit === 1 ? " s-hit" : hit === 2 ? " s-dim" : ""}`} style={{ width: "100%", ["--cfs" as string]: data.fs ?? 1, minHeight: compact ? fullH.get(id) ?? guessHeight({ width, data }) : undefined }}>
       <NodeResizeControl position="right" resizeDirection="horizontal" minWidth={200} maxWidth={900} className="card-resize" />
       <AllHandles />
       {data.del && (

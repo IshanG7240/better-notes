@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Icon } from "./icons";
 import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { AllHandles } from "./Handles";
@@ -11,6 +11,7 @@ function FrameNode({ id, data, selected }: NodeProps<FrameNodeT>) {
   const upd = useStore((s) => s.updateFrame);
   const bump = useStore((s) => s.bumpFont);
   const toggle = useStore((s) => s.toggleCollapse);
+  const [editing, setEditing] = useState(false);
   const count = useStore((s) => (data.collapsed ? s.board.nodes.filter((n) => n.type === "card" && data.members?.includes(n.id)).length : 0));
   const c = FRAME_COLORS[data.color % FRAME_COLORS.length];
   return (
@@ -20,15 +21,23 @@ function FrameNode({ id, data, selected }: NodeProps<FrameNodeT>) {
       <div className="frame-head">
         <button className="frame-chev nodrag" title={data.collapsed ? "Expand group" : "Collapse group into one block"} onClick={() => toggle(id)}><Icon name={data.collapsed ? "chevR" : "chev"} size={13} /></button>
         <button className="frame-dot nodrag" title="Change color" onClick={() => upd(id, { color: data.color + 1 })} />
-        <input
-          className="frame-title nodrag nopan"
-          value={data.title}
-          autoFocus={data.focus}
-          placeholder="Group name"
-          onFocus={() => data.focus && upd(id, { focus: false })}
-          onChange={(e) => upd(id, { title: e.target.value })}
-          onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLElement).blur()}
-        />
+        {editing || data.focus ? (
+          <input
+            className="frame-title nodrag nopan"
+            value={data.title}
+            autoFocus
+            placeholder="Group name"
+            onFocus={(e) => { e.target.select(); if (data.focus) upd(id, { focus: false }); setEditing(true); }}
+            onChange={(e) => upd(id, { title: e.target.value })}
+            onBlur={() => setEditing(false)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLElement).blur(); e.stopPropagation(); }}
+          />
+        ) : (
+          // a plain label: click selects the frame, drag moves it, double-click renames it
+          <span className={`frame-title frame-label${data.title ? "" : " empty"}`} title="Click to select · drag to move · double-click to rename" onDoubleClick={(e) => { e.stopPropagation(); setEditing(true); }}>
+            {data.title || "Group name"}
+          </span>
+        )}
         {data.collapsed && <span className="frame-count">{count} card{count === 1 ? "" : "s"}</span>}
         {selected && !data.collapsed && (
           <span className="frame-fs nodrag">

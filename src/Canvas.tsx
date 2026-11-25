@@ -295,7 +295,11 @@ export default function Canvas() {
           const h = isCard(n) ? fullH.get(n.id) ?? bx.h : bx.h;
           const inter = bx.x < b.x && bx.x + bx.w > a.x && bx.y < b.y && bx.y + h > a.y;
           const inside = bx.x >= a.x && bx.x + bx.w <= b.x && bx.y >= a.y && bx.y + h <= b.y;
-          return isFrame(n) ? inside : inter; // frames only when fully enclosed
+          if (!isFrame(n)) return inter;
+          // a frame: when fully enclosed, or when the box was started outside it and reaches into it
+          const s0 = rf.screenToFlowPosition({ x: m.x0 + r.left, y: m.y0 + r.top });
+          const startedOutside = !(s0.x >= bx.x && s0.x <= bx.x + bx.w && s0.y >= bx.y && s0.y <= bx.y + h);
+          return inside || (inter && startedOutside);
         })
         .map((n) => n.id);
       st.selectIds(ids, m.add);
@@ -515,8 +519,23 @@ export default function Canvas() {
         connectionRadius={48}
         onNodeDragStart={dragStart}
         onNodeDrag={dragging}
-        onNodeDragStop={() => (carry.current = null)}
+        onNodeDragStop={(_, node, dragged) => {
+          carry.current = null;
+          // dropped into (or next to) a frame: the frame grows to hold it and neighbours step aside
+          const ids = (dragged?.length ? dragged : [node]).map((n) => n.id);
+          setTimeout(() => useStore.getState().makeRoom(ids), 0);
+        }}
         onEdgeDoubleClick={(_, e) => useStore.getState().setEditingEdge(e.id)}
+        onPaneClick={(e) => {
+          // a click on the empty inside of a frame selects that frame (the innermost one)
+          const p = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+          const st = useStore.getState();
+          const hid = collapsedOwners(st.board.nodes).hidden;
+          const hit = st.board.nodes.filter((n) => isFrame(n) && !hid.has(n.id)).map((n) => ({ n, b: boxRect(n) }))
+            .filter(({ b }) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h)
+            .sort((a, b) => a.b.w * a.b.h - b.b.w * b.b.h)[0];
+          if (hit) st.selectIds([hit.n.id], e.shiftKey);
+        }}
         onPaneContextMenu={(e) => {
           e.preventDefault();
           const p = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
