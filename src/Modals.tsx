@@ -85,8 +85,8 @@ const COMMANDS: { id: AskAction | "space" | "organize" | "compact" | "frame" | "
   { id: "split", label: "AI: split cards", hint: "assistant", icon: "✂" },
   { id: "frame", label: "New empty frame", hint: "", icon: "▢＋" },
   { id: "space", label: "Space out (even gaps, keeps the shape)", hint: "Ctrl+E", icon: "↔" },
-  { id: "organize", label: "Line up (linked cards as flows, fit frames)", hint: "Ctrl+L", icon: "▦" },
-  { id: "compact", label: "Pack (rearrange tightly; selected frame, else board)", hint: "Ctrl+Shift+L", icon: "▤" },
+  { id: "organize", label: "Line up (even gaps, links read forwards)", hint: "Ctrl+L", icon: "▦" },
+  { id: "compact", label: "Pack (rearrange in reading order; selection, else board)", hint: "Ctrl+Shift+L", icon: "▤" },
   { id: "arrange", label: "AI: arrange into sections", hint: "assistant", icon: "▦" },
   { id: "doc", label: "Board → document", hint: "PRD, docs, outline, summary…", icon: "📄" },
   { id: "help", label: "Help: how everything works", hint: "? or F1", icon: "?" },
@@ -343,7 +343,7 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
         <li><K k="Ctrl+H" /> hides lines; <b>View</b> in the toolbar has more line options.</li>
         <li><b>Frame:</b> select cards and press <K k="Ctrl+G" />, or <b>Alt+double-click</b> the canvas (or press <K k="F" />, or click <b>Frame</b>) for an empty one. Click a frame's title or its empty inside to select it, drag the title to move it with everything inside, double-click the title to rename it.</li>
         <li><b>Drop a card into a frame:</b> the frame under your mouse pointer lights up; let go and the card lands inside it, next to what is already there (it never lands on top of another card), the frame grows sideways or down to keep a screen-like shape, and nearby cards step aside. Let go outside every frame and the card moves out. A selection box started outside a frame also selects the frame.</li>
-        <li><b>Resize a frame:</b> select it and drag its edges or corners. The size you give it sticks: it only grows from then on, and Line up / Arrange fill it in as many columns as fit.</li>
+        <li><b>Resize a frame:</b> select it and drag its edges or corners. Dragging cards in only grows it; Space out, Line up and Pack trim it snugly again (Pack and Arrange first fill it in as many columns as fit).</li>
         <li>A card belongs to the frame its centre is in. Frames can be collapsed into a single block.</li>
       </ul>
     </>
@@ -354,8 +354,8 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
       <p>Three layout tools, gentlest first. Frames always fit their cards afterwards, and pinned cards never move. Every tool (and every AI action) works the same way: <b>with something selected</b>, only on the selected cards and frames (and everything inside selected frames); <b>with nothing selected</b>, on the whole board. If something is left out, a note says what and why.</p>
       <ul>
         <li><b>Space out</b> <K k="Ctrl+E" />: evens out the gaps between neighbouring cards and frames (side by side, above each other or diagonal), keeping their order and shape.</li>
-        <li><b>Line up</b> <K k="Ctrl+L" />: lines up linked cards as a flow and fixes overlaps; things stay roughly in place.</li>
-        <li><b>Pack</b> <K k="Ctrl+Shift+L" />: rearranges everything tightly in reading order (or just the selected frame).</li>
+        <li><b>Line up</b> <K k="Ctrl+L" />: Space out, plus links read forwards: a linked card sitting before the card it comes from moves just after it. Nothing is redrawn as a tree.</li>
+        <li><b>Pack</b> <K k="Ctrl+Shift+L" />: rearranges everything in the order you read it (top to bottom, left to right), in neat columns.</li>
         <li><b>Undo:</b> <K k="Ctrl+Z" />, redo <K k="Ctrl+Shift+Z" /> or <K k="Ctrl+Y" />. Each board keeps its own history while the app is open.</li>
       </ul>
     </>

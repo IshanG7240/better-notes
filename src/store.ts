@@ -363,7 +363,7 @@ export const useStore = create<State>()((set, get) => ({
     setPref("cardDefault", n);
     setCardDefault(n);
     set({ cardDefault: n });
-    setTimeout(() => get().organizeLayout(undefined, false, []), 300);
+    setTimeout(() => get().organizeLayout("space", true, []), 300);
   },
   pinchSpeed: pref("pinchSpeed", 1),
   setPinchSpeed(n) {
@@ -386,7 +386,7 @@ export const useStore = create<State>()((set, get) => ({
     set({ zoomSpeed: n });
   },
   fontFamily: (() => { const f = pref<"sans" | "serif" | "mono">("fontFamily", "sans"); document.documentElement.dataset.font = f; return f; })(),
-  setFontFamily(f) { setPref("fontFamily", f); document.documentElement.dataset.font = f; set({ fontFamily: f }); setTimeout(() => get().organizeLayout(undefined, false, []), 300); },
+  setFontFamily(f) { setPref("fontFamily", f); document.documentElement.dataset.font = f; set({ fontFamily: f }); setTimeout(() => get().organizeLayout("space", true, []), 300); },
   fontScale: pref("fontScale", 1),
   setFontScale(n) {
     const v = Math.round(Math.max(0.7, Math.min(1.8, n)) * 100) / 100;
@@ -450,7 +450,7 @@ export const useStore = create<State>()((set, get) => ({
     }
     if (guide) { first = guide; seeded = true; set({ fitOnly: ["gf0", "gf1"] }); }
     set((st) => ({ boards, board: first!, fitTick: st.fitTick + 1 }));
-    if (seeded) setTimeout(() => get().organizeLayout(undefined, false, []), 1200); // sample positions predate the wider default cards
+    if (seeded) setTimeout(() => get().organizeLayout("space", true, []), 1200); // sample positions predate the wider default cards
     if (!settings.hasKey) set({ modal: "settings" });
   },
 
@@ -476,7 +476,7 @@ export const useStore = create<State>()((set, get) => ({
     await window.api.boards.save(gb);
     set((st) => ({ board: gb, modal: null, fitOnly: ["gf0", "gf1"], fitTick: st.fitTick + 1 }));
     set({ boards: await window.api.boards.list() });
-    setTimeout(() => get().organizeLayout(undefined, false, []), 1200);
+    setTimeout(() => get().organizeLayout("space", true, []), 1200);
   },
   async addSampleBoard() {
     await stopAskForSwitch(get);
@@ -485,7 +485,7 @@ export const useStore = create<State>()((set, get) => ({
     await window.api.boards.save(sb);
     set((st) => ({ board: sb, boards: st.boards, fitTick: st.fitTick + 1 }));
     set({ boards: await window.api.boards.list() });
-    setTimeout(() => get().organizeLayout(undefined, false, []), 1200);
+    setTimeout(() => get().organizeLayout("space", true, []), 1200);
   },
   async openBoard(id) {
     if (id === get().board.id) return;
@@ -575,7 +575,7 @@ export const useStore = create<State>()((set, get) => ({
         board: { ...s.board, nodes: s.board.nodes.map((n) => (isCard(n) && (!anySel || n.selected) ? ({ ...n, width: fit(n.data) } as AppNode) : n)) },
       };
     });
-    setTimeout(() => get().organizeLayout(undefined, false, []), 300); // widths changed: re-flow so nothing overlaps
+    setTimeout(() => get().organizeLayout("space", true, []), 300); // widths changed: clear overlaps only (nothing else moves)
   },
   setCardWidth(w) {
     set((s) => {
@@ -584,7 +584,7 @@ export const useStore = create<State>()((set, get) => ({
         board: { ...s.board, nodes: s.board.nodes.map((n) => (isCard(n) && (!anySel || n.selected) ? ({ ...n, width: w, measured: undefined } as AppNode) : n)) },
       };
     });
-    setTimeout(() => get().organizeLayout(undefined, false, []), 300); // widths changed: re-flow so nothing overlaps
+    setTimeout(() => get().organizeLayout("space", true, []), 300); // widths changed: clear overlaps only (nothing else moves)
   },
   togglePin(id) {
     set((s) => {
@@ -1422,7 +1422,7 @@ function applyStructure(st: StructureResult, r: NonNullable<typeof run>, set: (p
     const now = Date.now();
     set((s2) => ({ aiTouched: { ...s2.aiTouched, ...Object.fromEntries(fresh.map((n) => [n.id, now])) } }));
     // merged cards are taller: clear overlaps and refit frames once real heights are known
-    setTimeout(() => get().organizeLayout(undefined, false, []), 400);
+    setTimeout(() => get().organizeLayout("space", true, []), 400);
     return;
   }
   if (st.kind === "import") {
@@ -1670,7 +1670,10 @@ function placeNearAnchors(fresh: CardNodeT[], edges: NoteEdge[], nodes: AppNode[
   // components of new cards (joined by links between new cards), each with the existing card it hangs off
   const adj = new Map<string, string[]>();
   for (const e of edges) if (freshIds.has(e.source) && freshIds.has(e.target)) { adj.set(e.source, [...(adj.get(e.source) ?? []), e.target]); adj.set(e.target, [...(adj.get(e.target) ?? []), e.source]); }
-  const anchorOf = (id: string) => { for (const e of edges) { if (e.source === id && byId.has(e.target) && isCard(byId.get(e.target)!)) return e.target; if (e.target === id && byId.has(e.source) && isCard(byId.get(e.source)!)) return e.source; } return null; };
+  // the existing cards a new card links to (either direction). A card linked to several sits next to the one that comes
+  // latest in reading order: it usually belongs at the later stage, not beside the first card it mentions
+  const rank = new Map(readingOrder(visible.filter((n) => isCard(n) && !freshIds.has(n.id)).map((n) => ({ id: n.id, ...boxRect(n) }))).map((id, i) => [id, i]));
+  const linkedTo = (id: string) => edges.flatMap((e) => (e.source === id ? [e.target] : e.target === id ? [e.source] : [])).filter((o) => rank.has(o));
   const seen = new Set<string>();
   const taken: { x: number; y: number; w: number; h: number }[] = visible.map(boxRect);
   const grown = new Map<string, { x: number; y: number; width: number; height: number }>();
@@ -1681,7 +1684,7 @@ function placeNearAnchors(fresh: CardNodeT[], edges: NoteEdge[], nodes: AppNode[
     const stack = [start.id];
     while (stack.length) { const x = stack.pop()!; if (seen.has(x)) continue; seen.add(x); comp.push(fresh.find((f) => f.id === x)!); stack.push(...(adj.get(x) ?? [])); }
     comp.sort((a, b) => fresh.indexOf(a) - fresh.indexOf(b));
-    const anchorId = comp.map((c) => anchorOf(c.id)).find(Boolean);
+    const anchorId = comp.flatMap((c) => linkedTo(c.id)).reduce<string | null>((best, o) => (best === null || rank.get(o)! > rank.get(best)! ? o : best), null);
     const anchor = anchorId ? byId.get(anchorId)! : null;
     if (!anchor) continue; // nothing to sit next to: keep the default spot (right of the board)
     const w = Math.max(...comp.map(cardW));

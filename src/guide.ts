@@ -66,8 +66,8 @@ const SECTIONS: [string, C[]][] = [
   ["4 · Tidying up", [
     ["note", "Three layout tools, gentlest first", [
       "**Space out** (Ctrl+E): makes the gaps between things even, keeping their shape",
-      "**Line up** (Ctrl+L): lines up linked cards and fixes overlaps",
-      "**Pack** (Ctrl+Shift+L): rearranges everything tightly",
+      "**Line up** (Ctrl+L): the same, and links read forwards",
+      "**Pack** (Ctrl+Shift+L): rearranges everything in reading order",
       "Frames always fit their cards afterwards",
     ]],
     ["task", "Pin what should stay put", [

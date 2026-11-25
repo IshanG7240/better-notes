@@ -55,8 +55,8 @@ Enter / Esc = accept / reject AI suggestions · Del = delete · Ctrl +/−/0 = z
 Layout tools, gentlest first:
 
 - **Space out** (Ctrl+E): evens out the gaps between neighbouring cards and frames (too close: pushed apart, too far: pulled together), keeping their order and shape; frames fit snugly around their cards.
-- **Line up** (Ctrl+L): lines up linked cards as a flow, fixes overlaps, fits frames to their cards; things stay roughly in place.
-- **Pack** (Ctrl+Shift+L): rearranges everything tightly in reading order (or just the selected frame).
+- **Line up** (Ctrl+L): Space out, plus links read forwards (a linked card sitting before the card it comes from moves just after it); nothing is redrawn as a tree.
+- **Pack** (Ctrl+Shift+L): rearranges everything in reading order (top to bottom, left to right) in neat columns; works on the selection, or the whole board.
 
 Pinned cards never move.
 
