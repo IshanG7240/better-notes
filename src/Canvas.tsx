@@ -5,6 +5,7 @@ import CardNode from "./CardNode";
 import FrameNode from "./FrameNode";
 import LabelEdge from "./LabelEdge";
 import { useStore } from "./store";
+import { useDismiss } from "./useDismiss";
 import { isCard, isFrame, KINDS, type AppNode, type FrameNodeT, type NoteEdge as AppEdge } from "./types";
 import { setSpawn } from "./spawn";
 import { boxRect, CARD_W, descendants, frameSize, parentMap } from "./layout";
@@ -150,6 +151,7 @@ export default function Canvas() {
   }, [rf]);
 
   const [menu, setMenu] = useState<{ x: number; y: number; fx: number; fy: number } | null>(null);
+  useDismiss(!!menu, (t) => !!(t instanceof Element ? t : t.parentElement)?.closest(".ctx"), () => setMenu(null));
 
   useEffect(() => {
     if (!fitTick) return;
@@ -502,7 +504,7 @@ export default function Canvas() {
         startPan(t0.clientX, t0.clientY, "touch");
       }}
       onMouseDownCapture={(e) => {
-        setMenu(null);
+        if (!(e.target as Element).closest?.(".ctx")) setMenu(null);
         if ((e.ctrlKey || e.metaKey) && e.button === 0 && !inTerminal(e.target)) {
           // Ctrl + drag pans from anywhere, even on top of cards and frames
           e.stopPropagation();
@@ -627,8 +629,8 @@ export default function Canvas() {
           <button onClick={() => (addCard({ x: menu.fx - 130, y: menu.fy - 20 }), setMenu(null))}>＋ New card here</button>
           <button onClick={() => (addFrame({ x: menu.fx, y: menu.fy }), setMenu(null))}>▢ New group frame here</button>
           <button onClick={() => (useStore.getState().setAskAction("dump"), setMenu(null))}>🧠 Brain dump…</button>
-          <button title="Only moves things that overlap or are too close; everything else stays put" onClick={() => (useStore.getState().organizeLayout("space"), setMenu(null))}>↔ Space out (fix overlaps only)</button>
-          <button title="Lines linked cards up as a flow and fits frames; things stay roughly where they are" onClick={() => (useStore.getState().organizeLayout(), setMenu(null))}>▦ Line up (flows + fit frames)</button>
+          <button title="Evens out the gaps between neighbouring cards and frames, keeping their shape" onClick={() => (useStore.getState().organizeLayout("space"), setMenu(null))}>↔ Space out (even gaps)</button>
+          <button title="Space out, plus links read forwards; nothing is redrawn as a tree" onClick={() => (useStore.getState().organizeLayout(), setMenu(null))}>▦ Line up (even gaps + links forwards)</button>
           <button title="Rearranges everything tightly in reading order" onClick={() => (useStore.getState().compactLayout(), setMenu(null))}>▤ Pack (rearrange tightly)</button>
           <button onClick={() => (useStore.setState((s) => ({ fitTick: s.fitTick + 1 })), setMenu(null))}>⤢ Fit to screen</button>
         </div>

@@ -10,6 +10,7 @@ import ChatPanel from "./ChatPanel";
 import AskPanel from "./AskPanel";
 import { DocView, HelpModal, Palette, SettingsModal, Toasts, UsageChip } from "./Modals";
 import { persistBoard, useStore } from "./store";
+import { useDismiss } from "./useDismiss";
 import { THEMES, type Theme } from "./types";
 import { toMarkdown } from "./outlineTree";
 
@@ -61,12 +62,7 @@ function Sidebar() {
   const [shut, setShut] = useState<Record<string, boolean>>(() => { try { return JSON.parse(localStorage.getItem("bn.shutGroups") || "{}"); } catch { return {}; } });
   const toggle = (g: string) => setShut((o) => { const n = { ...o, [g]: !o[g] }; try { localStorage.setItem("bn.shutGroups", JSON.stringify(n)); } catch { /* ignore */ } return n; });
   const groupNames = [...new Set(boards.map((b) => b.group).filter((g): g is string => !!g))].sort((a, b) => a.localeCompare(b));
-  useEffect(() => {
-    if (!menu) return;
-    const h = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest(".grp-menu, .grp-btn")) setMenu(null); };
-    window.addEventListener("mousedown", h);
-    return () => window.removeEventListener("mousedown", h);
-  }, [menu]);
+  useDismiss(!!menu, (t) => !!(t instanceof Element ? t : t.parentElement)?.closest(".grp-menu, .grp-btn"), () => setMenu(null));
   const assign = (id: string, g: string) => { setBoardGroup(id, g); setMenu(null); setNewGroup(""); };
   const row = (b: (typeof boards)[number]) => (
     <div key={b.id} className={`board-row${b.id === board.id ? " active" : ""}${b.group ? " in-group" : ""}`} onClick={() => openBoard(b.id)} onDoubleClick={() => { openBoard(b.id); setOrig(board.id === b.id ? board.name : b.name); setEditing(b.id); }}>

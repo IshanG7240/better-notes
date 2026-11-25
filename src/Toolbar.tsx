@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useStore, rewriteTargets } from "./store";
+import { useDismiss } from "./useDismiss";
 import { isCard } from "./types";
 import { shareBoard } from "./share";
 import { Icon } from "./icons";
@@ -32,12 +33,7 @@ const Sep = () => <span className="tsep" />;
 function Pop({ icon, label, children }: { icon: string; label: string; children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    window.addEventListener("mousedown", h);
-    return () => window.removeEventListener("mousedown", h);
-  }, [open]);
+  useDismiss(open, (t) => !!ref.current?.contains(t), () => setOpen(false));
   return (
     <div className="pop" ref={ref}>
       <button className={`tbtn${open ? " on" : ""}`} onClick={() => setOpen(!open)} title={label}>
@@ -103,7 +99,7 @@ export default function Toolbar() {
           <Btn
             icon="organize"
             label="Line up"
-            hint={{ what: "Lines up cards joined by links (3 or more) into a neat flow, fixes overlaps, and resizes frames to fit their cards.", keeps: "Things stay roughly where you put them. Pinned cards stay put. With something selected: only that (and inside selected frames).", keys: "Ctrl+L" }}
+            hint={{ what: "Space out, plus links read forwards: a linked card sitting before the card it comes from is moved just after it. Frames fit snugly.", keeps: "Your shape: nothing is redrawn as a tree or put in rows. Pinned cards stay put. With something selected: only that (and inside selected frames).", keys: "Ctrl+L" }}
             onClick={() => st.organizeLayout()}
           />
           <Btn
