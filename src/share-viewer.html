@@ -13,7 +13,7 @@ header button,header input{font:inherit;font-size:13px;color:var(--text);backgro
 header input{width:150px;max-width:34vw}
 header button.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .ro{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
-#view{position:fixed;inset:46px 0 0 0;overflow:hidden;touch-action:none;cursor:grab}
+#view{position:fixed;inset:46px 0 0 0;overflow:hidden;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none}
 #view.drag{cursor:grabbing}
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
 .frame{position:absolute;border:2px solid var(--fc);border-radius:14px;background:color-mix(in srgb,var(--fc) 9%,transparent)}
@@ -49,7 +49,8 @@ const D=/*DATA*/null;
 const KC={idea:"var(--idea)",question:"var(--question)",risk:"var(--risk)",task:"var(--task)",note:"var(--note)"};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const TOK=/(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(~~[^~\n]+~~)|(\[[^\]\n]+\]\(https?:\/\/[^)\s]+\))|(https?:\/\/[^\s)<]+)|(\*[^*\s][^*\n]*\*)/g;
-function inl(t){let o="",l=0,m;TOK.lastIndex=0;while((m=TOK.exec(t))){o+=esc(t.slice(l,m.index));const s=m[0];
+// matchAll works on its own copy of TOK, so the recursive calls below can't reset the outer loop (that froze the page).
+function inl(t){let o="",l=0;for(const m of t.matchAll(TOK)){o+=esc(t.slice(l,m.index));const s=m[0];
  if(m[1])o+="<code>"+esc(s.slice(1,-1))+"</code>";else if(m[2])o+="<b>"+inl(s.slice(2,-2))+"</b>";else if(m[3])o+="<s>"+inl(s.slice(2,-2))+"</s>";
  else if(m[4]){const x=/^\[([^\]]+)\]\(([^)]+)\)$/.exec(s);o+='<a href="'+esc(x[2])+'" target="_blank" rel="noopener">'+esc(x[1])+"</a>"}
  else if(m[5])o+='<a href="'+esc(s)+'" target="_blank" rel="noopener">'+esc(s)+"</a>";else o+="<i>"+inl(s.slice(1,-1))+"</i>";l=m.index+s.length}
@@ -70,30 +71,42 @@ for(const n of D.nodes){const e=document.createElement("div");e.style.left=n.x+"
  els.set(n.id,e)}
 function drawEdges(){const NS="http://www.w3.org/2000/svg";let h='<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b8494"/></marker></defs>';
  world.querySelectorAll(".elabel").forEach(x=>x.remove());
- const box=id=>{const n=D.nodeById[id],e=els.get(id);return{x:n.x,y:n.y,w:n.w,h:n.type==="frame"?n.h:e.offsetHeight}};
+ // read every card height before adding labels, so the page lays out once instead of once per link
+ const H={};for(const n of D.nodes)H[n.id]=n.type==="frame"?n.h:els.get(n.id).offsetHeight;
+ const labels=document.createDocumentFragment();
+ const box=id=>{const n=D.nodeById[id];return{x:n.x,y:n.y,w:n.w,h:H[id]}};
  for(const ed of D.edges){const a=D.nodeById[ed.s],b=D.nodeById[ed.t];if(!a||!b)continue;const A=box(ed.s),B=box(ed.t);
   const ac={x:A.x+A.w/2,y:A.y+A.h/2},bc={x:B.x+B.w/2,y:B.y+B.h/2},dx=bc.x-ac.x,dy=bc.y-ac.y;let p,q,c1,c2;
   if(Math.abs(dx)*A.h>Math.abs(dy)*A.w){const s=dx>0?1:-1;p={x:A.x+(s>0?A.w:0),y:ac.y};q={x:B.x+(s>0?0:B.w),y:bc.y};const k=Math.max(40,Math.abs(q.x-p.x)/2);c1={x:p.x+s*k,y:p.y};c2={x:q.x-s*k,y:q.y}}
   else{const s=dy>0?1:-1;p={x:ac.x,y:A.y+(s>0?A.h:0)};q={x:bc.x,y:B.y+(s>0?0:B.h)};const k=Math.max(40,Math.abs(q.y-p.y)/2);c1={x:p.x,y:p.y+s*k};c2={x:q.x,y:q.y-s*k}}
   h+='<path d="M'+p.x+" "+p.y+" C"+c1.x+" "+c1.y+" "+c2.x+" "+c2.y+" "+q.x+" "+q.y+'" fill="none" stroke="#7b8494" stroke-width="1.6" opacity=".75" marker-end="url(#ar)"/>';
-  if(ed.label){const l=document.createElement("div");l.className="elabel";l.textContent=ed.label;l.style.left=(p.x+q.x)/2+"px";l.style.top=(p.y+q.y)/2+"px";world.appendChild(l)}}
- svg.innerHTML=h}
+  if(ed.label){const l=document.createElement("div");l.className="elabel";l.textContent=ed.label;l.style.left=(p.x+q.x)/2+"px";l.style.top=(p.y+q.y)/2+"px";labels.appendChild(l)}}
+ svg.innerHTML=h;world.appendChild(labels)}
 D.nodeById={};D.nodes.forEach(n=>D.nodeById[n.id]=n);
-let V={x:0,y:0,k:1};
-const apply=()=>{world.style.transform="translate("+V.x+"px,"+V.y+"px) scale("+V.k+")"};
+let V={x:0,y:0,k:1},raf=0,idle=0;
+// one transform write per frame, however many wheel/pointer events arrive
+const apply=()=>{if(!raf)raf=requestAnimationFrame(()=>{raf=0;world.style.transform="translate("+V.x+"px,"+V.y+"px) scale("+V.k+")"})};
+// while moving, the board is one GPU layer so panning doesn't repaint every card; dropped when still so text is redrawn sharp
+const moving=()=>{world.style.willChange="transform";clearTimeout(idle);idle=setTimeout(()=>{if(!P.size)world.style.willChange=""},250)};
 function fit(){const vw=view.clientWidth,vh=view.clientHeight;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
  for(const n of D.nodes){const h=n.type==="frame"?n.h:els.get(n.id).offsetHeight;x0=Math.min(x0,n.x);y0=Math.min(y0,n.y);x1=Math.max(x1,n.x+n.w);y1=Math.max(y1,n.y+h)}
  if(x0>x1){return}const k=Math.min(2,Math.min(vw/(x1-x0+80),vh/(y1-y0+80)));V={k,x:(vw-(x1-x0)*k)/2-x0*k,y:(vh-(y1-y0)*k)/2-y0*k};apply()}
 function zoomAt(f,cx,cy){const k=Math.max(.05,Math.min(3,V.k*f)),r=k/V.k;V={k,x:cx-(cx-V.x)*r,y:cy-(cy-V.y)*r};apply()}
-view.addEventListener("wheel",e=>{e.preventDefault();const r=view.getBoundingClientRect();if(e.ctrlKey||Math.abs(e.deltaY)>=Math.abs(e.deltaX)&&!e.shiftKey)zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?.01:.0018)),e.clientX-r.left,e.clientY-r.top);else{V.x-=e.deltaX;V.y-=e.deltaY;apply()}},{passive:false});
-const P=new Map();let last=0;
-view.addEventListener("pointerdown",e=>{if(e.target.closest("a"))return;view.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});view.classList.add("drag");last=0});
-view.addEventListener("pointermove",e=>{const o=P.get(e.pointerId);if(!o)return;const n={x:e.clientX,y:e.clientY};
+// same as the app: two-finger trackpad scroll pans; pinch (arrives as ctrl+wheel) and a mouse wheel zoom
+view.addEventListener("wheel",e=>{e.preventDefault();moving();const r=view.getBoundingClientRect(),f=e.deltaMode===1?16:1;
+ const mouse=e.deltaMode===1||(e.deltaX===0&&Math.abs(e.deltaY)>=50&&Number.isInteger(e.deltaY));
+ if(!e.ctrlKey&&!e.metaKey&&!mouse){V.x-=e.deltaX*f;V.y-=e.deltaY*f;apply();return}
+ const dy=Math.max(-80,Math.min(80,e.deltaY*f));
+ zoomAt(Math.exp(Math.max(-.12,Math.min(.12,-dy*(e.ctrlKey||e.metaKey?.0077:.0011)))),e.clientX-r.left,e.clientY-r.top)},{passive:false});
+const P=new Map();
+// preventDefault: a drag that starts on card text must pan, not select the text (or drag the selection, which cancels the pan)
+view.addEventListener("pointerdown",e=>{if(e.target.closest("a"))return;e.preventDefault();view.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});view.classList.add("drag");moving()});
+view.addEventListener("pointermove",e=>{const o=P.get(e.pointerId);if(!o)return;moving();const n={x:e.clientX,y:e.clientY};
  if(P.size===1){V.x+=n.x-o.x;V.y+=n.y-o.y;apply()}
  else if(P.size===2){const ids=[...P.keys()],other=P.get(ids.find(i=>i!==e.pointerId)),d0=Math.hypot(o.x-other.x,o.y-other.y),d1=Math.hypot(n.x-other.x,n.y-other.y);
   const r=view.getBoundingClientRect();if(d0>0)zoomAt(d1/d0,(n.x+other.x)/2-r.left,(n.y+other.y)/2-r.top);V.x+=(n.x-o.x)/2;V.y+=(n.y-o.y)/2;apply()}
  P.set(e.pointerId,n)});
-const end=e=>{P.delete(e.pointerId);if(!P.size)view.classList.remove("drag")};
+const end=e=>{P.delete(e.pointerId);if(!P.size)view.classList.remove("drag");moving()};
 view.addEventListener("pointerup",end);view.addEventListener("pointercancel",end);
 document.getElementById("fit").onclick=fit;
 // outline (phone-friendly list)
@@ -109,6 +122,6 @@ document.getElementById("q").addEventListener("input",e=>{const w=e.target.value
  for(const n of D.nodes){if(n.type!=="card")continue;const el=els.get(n.id);el.classList.toggle("hit",!!w.length&&m(n));el.classList.toggle("dim",!!w.length&&!m(n))}
  list.querySelectorAll(".card").forEach(c=>{const n=D.nodeById[c.dataset.id];c.style.display=!w.length||m(n)?"":"none"})});
 const start=()=>{drawEdges();fit()};
-requestAnimationFrame(start);setTimeout(start,150);addEventListener("load",start);
+requestAnimationFrame(start);addEventListener("load",start);
 let rt;addEventListener("resize",()=>{clearTimeout(rt);rt=setTimeout(()=>{if(!document.body.classList.contains("outline"))fit()},150)});
 </script></body></html>
