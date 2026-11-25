@@ -48,7 +48,7 @@ Inside: `boards/*.json` (one file per board, with older versions in `boards/.his
 New here? Open the **Getting started** board (it opens on first launch) or press **?** / **F1** in the app for the full guide.
 
 
-Double-click canvas = new card · Tab = child card · Ctrl+K = AI · paste long text = brain dump ·
+Double-click canvas = new card · Tab = child card · Ctrl+K = AI ·
 Enter / Esc = accept / reject AI suggestions · Del = delete · Ctrl +/−/0 = zoom the UI ·
 1–5 = set the type of selected cards (idea, question, risk, task, note) · in a card's notes: Tab / Shift+Tab = nest / un-nest points.
 

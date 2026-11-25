@@ -159,7 +159,7 @@ export default function Canvas() {
     setTimeout(() => rf.fitView({ padding: only ? 0.12 : 0.25, maxZoom: 1, duration: 500, ...(only ? { nodes: only.map((id) => ({ id })) } : {}) }), 50);
   }, [fitTick, rf]);
 
-  // ---- keyboard / paste ----
+  // ---- keyboard ----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const st = useStore.getState();
@@ -235,17 +235,9 @@ export default function Canvas() {
         st.setEditingEdge(selEdge.id);
       } else if (e.key === "Escape" && st.ghostCount()) st.rejectGhosts();
     };
-    const onPaste = (e: ClipboardEvent) => {
-      const st = useStore.getState();
-      if (st.modal || isTyping(e.target) || inTerminal(e.target)) return;
-      const text = e.clipboardData?.getData("text/plain") ?? "";
-      if (text.trim().length > 120) { st.setAskDraft(text.trim()); st.setAskAction("dump"); }
-    };
     window.addEventListener("keydown", onKey);
-    window.addEventListener("paste", onPaste);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("paste", onPaste);
     };
   }, []);
 
@@ -616,7 +608,7 @@ export default function Canvas() {
         <div className="empty-hint">
           <div className="eh-title">An empty board</div>
           <div>Double-click anywhere to add a card, or press <kbd>N</kbd></div>
-          <div>Paste a long text to turn it into cards</div>
+          <div>Or open the assistant (<kbd>Ctrl</kbd>+<kbd>K</kbd>) and use <b>From text</b> to turn notes into cards</div>
           <button className="eh-help" onClick={() => useStore.getState().setModal("help")}>Press <kbd>?</kbd> for the guide</button>
         </div>
       )}

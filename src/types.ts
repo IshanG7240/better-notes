@@ -32,6 +32,8 @@ export type FrameData = {
   ghost?: boolean;
   members?: string[];
   box?: { w: number; h: number };
+  /** resized by hand: fitting only grows it (never shrinks it below the size you gave it) */
+  sized?: boolean;
 };
 export type FrameNodeT = Node<FrameData, "frame">;
 export type AppNode = CardNodeT | FrameNodeT;

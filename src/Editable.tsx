@@ -242,7 +242,13 @@ function LineEditor({ value, onChange, placeholder, tall, onDone }: { value: str
         }
         return commit(v.slice(0, ls) + v.slice(a), ls); // empty bullet -> end the list
       }
-      const ins = m ? `\n${m[1]}${/\d/.test(m[2]) ? `${parseInt(m[2]) + 1}${m[2].slice(-1)}` : m[2]}${m[3] ? " [ ]" : ""} ` : "\n";
+      const ind = m || e.shiftKey ? null : /^[\t ]+/.exec(line); // plain nested line: the next one stays at its level
+      if (ind && a === b && !line.trim()) {
+        // empty indented line -> step out one level
+        const out = line.replace(/^(\t| {1,2})/, "");
+        return commit(v.slice(0, ls) + out + v.slice(a), ls + out.length);
+      }
+      const ins = ind ? "\n" + ind[0] : m ? `\n${m[1]}${/\d/.test(m[2]) ? `${parseInt(m[2]) + 1}${m[2].slice(-1)}` : m[2]}${m[3] ? " [ ]" : ""} ` : "\n";
       commit(v.slice(0, a) + ins + v.slice(b), a + ins.length);
     }
   };

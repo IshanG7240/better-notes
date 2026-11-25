@@ -37,7 +37,7 @@ import { sampleBoard } from "./sample";
 import { guideBoard, GUIDE_NAME } from "./guide";
 import { aggregateEdges, collapsedOwners } from "./lines";
 import { spawnPoint } from "./spawn";
-import { CARD_W, setCardDefault, cardW, FRAME_PAD, boxRect, descendants, estHeight, guessHeight, frameSize, layoutNew, membersOf, organize, COLLAPSED, parentMap, readingOrder } from "./layout";
+import { CARD_W, setCardDefault, cardW, FRAME_PAD, boxRect, descendants, estHeight, guessHeight, frameSize, layoutNew, membersOf, organize, COLLAPSED, parentMap, readingOrder, screenAspect } from "./layout";
 import { fullH } from "./heights";
 import { spaceOut, tidy, fitFrames } from "./tidy";
 import { flowEdges, isLinkType, type LinkType } from "./linktypes";
@@ -718,21 +718,59 @@ export const useStore = create<State>()((set, get) => ({
         continue;
       }
       if (T) {
-        // fully inside the target, clear of its title (it grows downward / rightward if needed)
+        // inside the target, clear of its title (the frame grows right / down to hold it)
         const r = T.r, P = FRAME_PAD;
-        const nx = Math.min(Math.max(bx, r.x + P.x), Math.max(r.x + P.x, r.x + r.w - P.x - (br - bx)));
+        const nx = Math.max(bx, r.x + P.x);
         const ny = Math.max(by, r.y + P.top);
         if (nx !== bx || ny !== by) { dx += nx - bx; dy += ny - by; continue; }
       }
       break;
     }
-    if (dx || dy) {
+    let grow: { x: number; y: number; width: number; height: number } | null = null;
+    if (T) {
+      // don't land on what is already in the frame: take the free spot (beside or below something) that is close to
+      // where it was dropped and keeps the frame near the screen's shape, then grow the frame around it right away
+      const P = FRAME_PAD, G = 36, w = box.r - box.x, h = box.b - box.y, r = T.r;
+      const inside = descendants(T.f as FrameNodeT, nodes).filter((n) => !moving.has(n.id) && !hidden.has(n.id)).map(rectOf);
+      const free = (x: number, y: number) => !inside.some((q) => x < q.x + q.w + G && q.x < x + w + G && y < q.y + q.h + G && q.y < y + h + G);
+      const at = { x: box.x + dx, y: box.y + dy };
+      const frameFor = (x: number, y: number) => {
+        const fx = Math.min(r.x, x - P.x), fy = Math.min(r.y, y - P.top);
+        return { x: fx, y: fy, w: Math.max(r.x + r.w, x + w + P.x) - fx, h: Math.max(r.y + r.h, y + h + P.bottom) - fy };
+      };
+      if (!free(at.x, at.y)) {
+        const cands: { x: number; y: number }[] = [];
+        for (const q of inside) {
+          cands.push({ x: q.x + q.w + G, y: at.y }, { x: q.x + q.w + G, y: q.y }, { x: at.x, y: q.y + q.h + G }, { x: q.x, y: q.y + q.h + G });
+        }
+        const want = screenAspect();
+        const cost = (c: { x: number; y: number }) => {
+          const f = frameFor(c.x, c.y);
+          return Math.hypot(c.x - at.x, c.y - at.y) + 500 * Math.abs(Math.log(f.w / f.h / want)) + 0.5 * (f.w - r.w + f.h - r.h);
+        };
+        const best = cands
+          .map((c) => ({ x: Math.max(c.x, r.x + P.x), y: Math.max(c.y, r.y + P.top) }))
+          .filter((c) => free(c.x, c.y))
+          .sort((a, b) => cost(a) - cost(b))[0];
+        if (best) { dx += best.x - at.x; dy += best.y - at.y; }
+      }
+      const f = frameFor(box.x + dx, box.y + dy);
+      if (f.w > r.w + 0.5 || f.h > r.h + 0.5) grow = { x: Math.round(f.x), y: Math.round(f.y), width: Math.round(f.w), height: Math.round(f.h) };
+    }
+    if (dx || dy || grow) {
       set((s) => ({
         animating: true,
-        board: { ...s.board, nodes: s.board.nodes.map((n) => (moving.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } } : n)) },
+        board: {
+          ...s.board,
+          nodes: s.board.nodes.map((n) =>
+            moving.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy } }
+            : grow && n.id === T!.f.id ? ({ ...n, position: { x: grow.x, y: grow.y }, width: grow.width, height: grow.height } as AppNode)
+            : n),
+        },
       }));
     }
-    get().makeRoom(ids);
+    // the frame that grew pushes its neighbours aside (and its own outer frames grow)
+    get().makeRoom(grow ? [...ids, T!.f.id] : ids);
   },
   makeRoom(ids) {
     const { board } = get();

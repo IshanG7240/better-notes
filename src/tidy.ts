@@ -1,6 +1,6 @@
 import dagre from "@dagrejs/dagre";
 import { fullH } from "./heights";
-import { boxRect, cardW, estHeight, FRAME_PAD, frameSize, parentMap, readingOrder } from "./layout";
+import { boxRect, cardW, estHeight, FRAME_PAD, frameSize, parentMap, readingOrder, screenAspect } from "./layout";
 import { isCard, isFrame, type AppNode, type FrameNodeT, type NoteEdge } from "./types";
 
 type R = { x: number; y: number; w: number; h: number };
@@ -11,11 +11,18 @@ const wrap = (rs: R[]): R => {
   const x2 = Math.max(...rs.map((r) => r.x + r.w)) + FRAME_PAD.x, y2 = Math.max(...rs.map((r) => r.y + r.h)) + FRAME_PAD.bottom;
   return { x, y, w: Math.max(x2 - x, FRAME_MIN_W), h: y2 - y };
 };
+/** wrap(), but a frame sized by hand only grows: it keeps at least the box it has now. */
+const fitTo = (n: AppNode | undefined, cur: R, rs: R[]): R => {
+  const w = wrap(rs);
+  if (!n || !isFrame(n) || !n.data.sized) return w;
+  const x = Math.min(w.x, cur.x), y = Math.min(w.y, cur.y);
+  return { x, y, w: Math.max(w.x + w.w, cur.x + cur.w) - x, h: Math.max(w.y + w.h, cur.y + cur.h) - y };
+};
 
 /**
  * Gentle, context-aware tidy. Things stay roughly where you put them:
- *  - cards joined by links (3+ in a chain or tree) are laid out as a flow (left to right on the board,
- *    top to bottom inside a frame), anchored where that cluster already is;
+ *  - linked cards: a tree / branching cluster is drawn as a tree (right or down, whichever fits the screen better);
+ *    a plain chain keeps your arrangement and only a backwards link is fixed; a linked cluster moves as one block;
  *  - overlaps are pushed apart, in reading order, so earlier things keep their spot;
  *  - frames shrink or grow to fit what is inside them.
  * Nothing is packed into rows or columns. Works inside-out: the deepest frames first.
@@ -58,7 +65,7 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
     if (!items.length) continue;
     const root = c === "";
     // a frame holding a pinned card keeps its contents where they are, but still fits around them
-    if (c && locked.has(c)) { rect.set(c, wrap(items.map((id) => rect.get(id)!))); continue; }
+    if (c && locked.has(c)) { rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!))); continue; }
 
     // 1) flow: link clusters among the loose cards of this container
     const cardItems = new Set(items.filter((id) => solid(id) && !locked.has(id)));
@@ -76,46 +83,105 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
       adj.get(b)!.add(a);
     }
     const done = new Set<string>();
+    const unitOf = new Map<string, string[]>(); // linked cards move as one block in step 2, so a flow never gets split
     for (const start of adj.keys()) {
       if (done.has(start)) continue;
       const comp: string[] = [];
       const stack = [start];
       while (stack.length) { const x = stack.pop()!; if (done.has(x)) continue; done.add(x); comp.push(x); stack.push(...adj.get(x)!); }
+      for (const id of comp) unitOf.set(id, comp);
       const ce = flow.filter(([a]) => comp.includes(a));
-      if (comp.length < 3 || ce.length > comp.length + 1) continue; // only chains / trees read as a flow
-      const g = new dagre.graphlib.Graph();
-      g.setGraph({ rankdir: root ? "LR" : "TB", nodesep: root ? 40 : 26, ranksep: root ? 90 : 46, marginx: 0, marginy: 0 });
-      g.setDefaultEdgeLabel(() => ({}));
-      for (const id of comp) g.setNode(id, { width: rect.get(id)!.w, height: rect.get(id)!.h });
-      for (const [a, b] of ce) g.setEdge(a, b);
-      dagre.layout(g);
-      const ox = Math.min(...comp.map((id) => rect.get(id)!.x)), oy = Math.min(...comp.map((id) => rect.get(id)!.y));
-      const lx = Math.min(...comp.map((id) => g.node(id).x - g.node(id).width / 2)), ly = Math.min(...comp.map((id) => g.node(id).y - g.node(id).height / 2));
-      for (const id of comp) {
-        const n = g.node(id), r = rect.get(id)!;
-        move(id, Math.round(n.x - n.width / 2 - lx + ox - r.x), Math.round(n.y - n.height / 2 - ly + oy - r.y));
+      // keep the arrangement you made (no levelling into one straight row); only a link that points backwards
+      // (the later card sits up-and-left of the earlier one) is fixed, by moving the later card just past the earlier
+      // one, in flow order so a fix carries down the chain. Cycles have no order: left alone.
+      const indeg = new Map(comp.map((id) => [id, 0]));
+      for (const [, b] of ce) indeg.set(b, indeg.get(b)! + 1);
+      const ready = comp.filter((id) => indeg.get(id) === 0);
+      const topo: string[] = [];
+      while (ready.length) {
+        const id = ready.shift()!;
+        topo.push(id);
+        for (const [a, b] of ce) if (a === id) { indeg.set(b, indeg.get(b)! - 1); if (indeg.get(b) === 0) ready.push(b); }
       }
+      if (topo.length !== comp.length) continue;
+      // a tree / branching graph is drawn as one: parents before children, branches fanned out, going right or down,
+      // whichever gives a shape closer to the screen's. It keeps the spot where the cluster was.
+      const outs = new Map<string, number>(), ins = new Map<string, number>();
+      for (const [a, b] of ce) { outs.set(a, (outs.get(a) ?? 0) + 1); ins.set(b, (ins.get(b) ?? 0) + 1); }
+      if (comp.length >= 3 && comp.some((id) => (outs.get(id) ?? 0) > 1 || (ins.get(id) ?? 0) > 1)) {
+        const lay = (dir: "LR" | "TB") => {
+          const g = new dagre.graphlib.Graph();
+          g.setGraph({ rankdir: dir, nodesep: dir === "LR" ? 32 : 36, ranksep: dir === "LR" ? 90 : 60, marginx: 0, marginy: 0 });
+          g.setDefaultEdgeLabel(() => ({}));
+          // siblings keep the order they had across the flow (top to bottom when going right, left to right when going down)
+          const cross = (id: string) => (dir === "LR" ? rect.get(id)!.y : rect.get(id)!.x);
+          const sorted = [...comp].sort((p, q) => cross(p) - cross(q));
+          for (const id of sorted) g.setNode(id, { width: rect.get(id)!.w, height: rect.get(id)!.h });
+          for (const [a, b] of [...ce].sort((p, q) => cross(p[1]) - cross(q[1]))) g.setEdge(a, b);
+          dagre.layout(g);
+          const box = g.graph() as { width?: number; height?: number };
+          return { g, shape: Math.abs(Math.log((box.width ?? 1) / Math.max(1, box.height ?? 1) / screenAspect())) };
+        };
+        const isTree = comp.every((id) => (ins.get(id) ?? 0) <= 1);
+        const lr = isTree ? treeLay(comp, ce, rect, "LR") : lay("LR"), tb = isTree ? treeLay(comp, ce, rect, "TB") : lay("TB");
+        const { g } = lr.shape <= tb.shape ? lr : tb;
+        const ox = Math.min(...comp.map((id) => rect.get(id)!.x)), oy = Math.min(...comp.map((id) => rect.get(id)!.y));
+        const lx = Math.min(...comp.map((id) => g.node(id).x - g.node(id).width / 2)), ly = Math.min(...comp.map((id) => g.node(id).y - g.node(id).height / 2));
+        for (const id of comp) {
+          const n = g.node(id), r = rect.get(id)!;
+          move(id, Math.round(n.x - n.width / 2 - lx + ox - r.x), Math.round(n.y - n.height / 2 - ly + oy - r.y));
+        }
+        continue;
+      }
+      // a plain chain keeps the arrangement you made (no levelling into one row): only fix backwards links
+      const G = root ? 90 : 46;
+      const corner = () => ({ x: Math.min(...comp.map((id) => rect.get(id)!.x)), y: Math.min(...comp.map((id) => rect.get(id)!.y)) });
+      const was = corner();
+      let fixed = false;
+      for (const a of topo) {
+        for (const [s, b] of ce) {
+          if (s !== a || locked.has(b)) continue;
+          const ra = rect.get(a)!, rb = rect.get(b)!;
+          const back = rb.x + rb.w / 2 <= ra.x + ra.w / 2 && rb.y + rb.h / 2 <= ra.y + ra.h / 2;
+          if (!back) continue;
+          if (root) move(b, ra.x + ra.w + G - rb.x, 0);
+          else move(b, 0, ra.y + ra.h + G - rb.y);
+          fixed = true;
+        }
+      }
+      // the cluster stays where it was: its top-left corner doesn't move
+      if (fixed) { const now = corner(); for (const id of comp) if (!locked.has(id)) move(id, was.x - now.x, was.y - now.y); }
     }
 
-    // 2) push overlaps apart in reading order; locked things and earlier things keep their place
+    // 2) push overlaps apart in reading order; locked things and earlier things keep their place.
+    //    A linked cluster moves as one block, so its flow keeps its shape and direction.
     const M = root ? 56 : 24;
     const order = readingOrder(items.map((id) => ({ id, ...rect.get(id)! })));
     const placed: string[] = items.filter((id) => locked.has(id));
-    for (const id of order) {
-      if (locked.has(id)) continue;
+    const handled = new Set<string>();
+    for (const first of order) {
+      if (locked.has(first) || handled.has(first)) continue;
+      const unit = (unitOf.get(first) ?? [first]).filter((id) => !locked.has(id));
+      for (const id of unit) handled.add(id);
       for (let guard = 0; guard < 400; guard++) {
-        const r = rect.get(id)!;
-        const hit = placed.find((p) => { const q = rect.get(p)!; return r.x < q.x + q.w + M && q.x < r.x + r.w + M && r.y < q.y + q.h + M && q.y < r.y + r.h + M; });
-        if (!hit) break;
-        const q = rect.get(hit)!;
-        const right = q.x + q.w + M - r.x, down = q.y + q.h + M - r.y;
-        if (right <= down) move(id, right, 0); else move(id, 0, down);
+        let push: { dx: number; dy: number } | null = null;
+        for (const id of unit) {
+          const r = rect.get(id)!;
+          const hit = placed.find((p) => { const q = rect.get(p)!; return r.x < q.x + q.w + M && q.x < r.x + r.w + M && r.y < q.y + q.h + M && q.y < r.y + r.h + M; });
+          if (!hit) continue;
+          const q = rect.get(hit)!;
+          const right = q.x + q.w + M - r.x, down = q.y + q.h + M - r.y;
+          push = right <= down ? { dx: right, dy: 0 } : { dx: 0, dy: down };
+          break;
+        }
+        if (!push) break;
+        for (const id of unit) move(id, push.dx, push.dy);
       }
-      placed.push(id);
+      placed.push(...unit);
     }
 
     // 3) a frame wraps what is inside it
-    if (!root) rect.set(c, wrap(items.map((id) => rect.get(id)!)));
+    if (!root) rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!)));
   }
 
   const pos = new Map<string, { x: number; y: number }>();
@@ -129,6 +195,55 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
     }
   }
   return { pos, size };
+}
+
+/**
+ * A tidy tree (every card has at most one parent): depth goes along `dir`, children keep the order they already
+ * had across it, and each parent is centred on its children. Same shape of result as the dagre layout.
+ */
+function treeLay(comp: string[], ce: [string, string][], rect: Map<string, R>, dir: "LR" | "TB") {
+  const kids = new Map<string, string[]>();
+  const hasParent = new Set<string>();
+  for (const [a, b] of ce) { kids.set(a, [...(kids.get(a) ?? []), b]); hasParent.add(b); }
+  const along = (id: string) => (dir === "LR" ? rect.get(id)!.w : rect.get(id)!.h);
+  const across = (id: string) => (dir === "LR" ? rect.get(id)!.h : rect.get(id)!.w);
+  const crossPos = (id: string) => (dir === "LR" ? rect.get(id)!.y : rect.get(id)!.x);
+  for (const k of kids.values()) k.sort((p, q) => crossPos(p) - crossPos(q));
+  const RANK = dir === "LR" ? 90 : 60, SIB = dir === "LR" ? 32 : 36;
+  const depth = new Map<string, number>();
+  const roots = comp.filter((id) => !hasParent.has(id)).sort((p, q) => crossPos(p) - crossPos(q));
+  const walk = (id: string, d: number) => { depth.set(id, d); for (const k of kids.get(id) ?? []) walk(k, d + 1); };
+  roots.forEach((r) => walk(r, 0));
+  const rankSize: number[] = [];
+  for (const id of comp) { const d = depth.get(id)!; rankSize[d] = Math.max(rankSize[d] ?? 0, along(id)); }
+  const rankStart: number[] = [];
+  rankSize.reduce((acc, sz, i) => ((rankStart[i] = acc), acc + sz + RANK), 0);
+  const pos = new Map<string, { a: number; c: number }>(); // a: along the flow, c: across (centre)
+  const span = new Map<string, number>();
+  const size = (id: string): number => {
+    const k = kids.get(id) ?? [];
+    const sum = k.reduce((t, c) => t + size(c), 0) + SIB * Math.max(0, k.length - 1);
+    const v = Math.max(across(id), sum);
+    span.set(id, v);
+    return v;
+  };
+  const place = (id: string, c0: number) => {
+    const k = kids.get(id) ?? [], sp = span.get(id)!;
+    const sum = k.reduce((t, c) => t + span.get(c)!, 0) + SIB * Math.max(0, k.length - 1);
+    let c = c0 + (sp - sum) / 2;
+    for (const ch of k) { place(ch, c); c += span.get(ch)! + SIB; }
+    pos.set(id, { a: rankStart[depth.get(id)!], c: c0 + sp / 2 });
+  };
+  let c0 = 0;
+  for (const r of roots) { size(r); place(r, c0); c0 += span.get(r)! + SIB; }
+  // same interface as a dagre graph: node(id) -> centre x/y + size
+  const node = (id: string) => {
+    const p = pos.get(id)!, w = rect.get(id)!.w, h = rect.get(id)!.h;
+    return dir === "LR" ? { x: p.a + w / 2, y: p.c, width: w, height: h } : { x: p.c, y: p.a + h / 2, width: w, height: h };
+  };
+  const W = Math.max(...comp.map((id) => node(id).x + node(id).width / 2)) - Math.min(...comp.map((id) => node(id).x - node(id).width / 2));
+  const H = Math.max(...comp.map((id) => node(id).y + node(id).height / 2)) - Math.min(...comp.map((id) => node(id).y - node(id).height / 2));
+  return { g: { node }, shape: Math.abs(Math.log(W / Math.max(1, H) / screenAspect())) };
 }
 
 /** Gap kept around things: on the open board, and between things inside a frame. Same as tidy() so the two agree. */
@@ -253,7 +368,7 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
       placed.push(id);
     }
     // 3) the frame fits snugly around what is inside it (grows or shrinks; the contents don't move)
-    if (c) rect.set(c, wrap(items.map((id) => rect.get(id)!)));
+    if (c) rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!)));
   }
 
   const pos = new Map<string, { x: number; y: number }>();
@@ -286,7 +401,7 @@ export function fitFrames(nodes: AppNode[], only?: Set<string>, fixedH: Map<stri
   const frames = nodes.filter((n) => isFrame(n) && !n.data.collapsed && (kids.get(n.id)?.length ?? 0) > 0).sort((a, b) => depth(b.id) - depth(a.id));
   const out = new Map<string, { x: number; y: number; width: number; height: number }>();
   for (const f of frames) {
-    const r = wrap(kids.get(f.id)!.map((id) => rect.get(id)!));
+    const r = fitTo(f, rect.get(f.id)!, kids.get(f.id)!.map((id) => rect.get(id)!));
     rect.set(f.id, r);
     if (only && !only.has(f.id)) continue;
     const s = frameSize(f as FrameNodeT);

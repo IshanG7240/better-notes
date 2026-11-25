@@ -342,7 +342,8 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
         <li><b>Label a link:</b> double-click it. Click a link to choose its type: leads to, part of, supports, contradicts, risk for.</li>
         <li><K k="Ctrl+H" /> hides lines; <b>View</b> in the toolbar has more line options.</li>
         <li><b>Frame:</b> select cards and press <K k="Ctrl+G" />, or click <b>Frame</b> for an empty one. Click a frame's title or its empty inside to select it, drag the title to move it with everything inside, double-click the title to rename it.</li>
-        <li><b>Drop a card into a frame:</b> the frame under your mouse pointer lights up; let go and the card lands inside it, the frame grows to hold it and nearby cards step aside. Let go outside every frame and the card moves out. A selection box started outside a frame also selects the frame.</li>
+        <li><b>Drop a card into a frame:</b> the frame under your mouse pointer lights up; let go and the card lands inside it, next to what is already there (it never lands on top of another card), the frame grows sideways or down to keep a screen-like shape, and nearby cards step aside. Let go outside every frame and the card moves out. A selection box started outside a frame also selects the frame.</li>
+        <li><b>Resize a frame:</b> select it and drag its edges or corners. The size you give it sticks: it only grows from then on, and Line up / Arrange fill it in as many columns as fit.</li>
         <li>A card belongs to the frame its centre is in. Frames can be collapsed into a single block.</li>
       </ul>
     </>
@@ -369,7 +370,6 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
         <li><b>Give instructions:</b> type in the box first, then click a button, e.g. Expand + "focus on costs, put them in a frame", or Arrange + "only the selected cards".</li>
         <li><b>Suggest / Apply / Auto</b> (bottom of the panel): Suggest shows changes dashed until you accept (<K k="Enter" />) or reject (<K k="Esc" />); Apply makes them right away (removals still ask); Auto does removals too.</li>
         <li><b>Undo this turn</b> under an answer reverts everything that answer did.</li>
-        <li>Pasting a long text onto the canvas offers to turn it into cards.</li>
       </ul>
     </>
   ) },

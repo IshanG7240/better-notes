@@ -16,7 +16,15 @@ function FrameNode({ id, data, selected }: NodeProps<FrameNodeT>) {
   const c = FRAME_COLORS[data.color % FRAME_COLORS.length];
   return (
     <div className={`frame${data.collapsed ? " collapsed" : ""}${data.ghost ? " ghost" : ""}`} style={{ ["--fc" as string]: c, ["--cfs" as string]: data.fs ?? 1 }}>
-      <NodeResizer isVisible={!!selected && !data.collapsed} minWidth={200} minHeight={120} lineClassName="frame-line" handleClassName="frame-handle" />
+      <NodeResizer
+        isVisible={!!selected && !data.collapsed}
+        minWidth={200}
+        minHeight={120}
+        lineClassName="frame-line"
+        handleClassName="frame-handle"
+        // your size sticks (fitting only grows it from now on); if it grew into its neighbours, they step aside
+        onResizeEnd={() => { upd(id, { sized: true }); setTimeout(() => useStore.getState().makeRoom([id]), 0); }}
+      />
       <AllHandles hidden />
       <div className="frame-head">
         <button className="frame-chev nodrag" title={data.collapsed ? "Expand group" : "Collapse group into one block"} onClick={() => toggle(id)}><Icon name={data.collapsed ? "chevR" : "chev"} size={13} /></button>

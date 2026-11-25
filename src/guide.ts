@@ -59,6 +59,7 @@ const SECTIONS: [string, C[]][] = [
       "- [ ] Press Ctrl+G to put them in a frame",
       "Drag a frame by its title: everything inside moves with it; double-click the title to rename it",
       "Drag a card over a frame: it lights up where your pointer is; let go and the frame makes room for it",
+      "Select a frame and drag its edges or corners to resize it; it keeps the size you give it",
       "Or click **Frame** in the toolbar for an empty one",
     ]],
   ]],
@@ -94,7 +95,7 @@ const SECTIONS: [string, C[]][] = [
       "**Expand**: child cards for the selected cards",
       "**Arrange**: sort cards into frames in reading order",
       "**Cluster**, **Split**, **Condense**, **Rewrite**, **Risks**, **Gaps**, **Links**",
-      "**From text**: paste messy notes and get cards (or just paste long text)",
+      "**From text**: paste messy notes and get cards",
       "**Doc**: write a document from the board",
     ]],
     ["task", "Tell the buttons what you want", [

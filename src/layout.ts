@@ -88,6 +88,37 @@ export function layoutNew(
   return out;
 }
 
+/** The shape frames aim for (width / height): the screen's, so a full frame reads without much scrolling. */
+export const screenAspect = () => {
+  const w = typeof window !== "undefined" ? window.innerWidth : 1600, h = typeof window !== "undefined" ? window.innerHeight : 900;
+  return Math.min(2.4, Math.max(1, w / Math.max(1, h)));
+};
+
+/**
+ * Split `hs` (heights, in order) into `k` consecutive columns so the tallest column is as short as possible.
+ * Returns the start index of each column.
+ */
+export function splitColumns(hs: number[], k: number, gap: number): number[] {
+  const n = hs.length;
+  k = Math.max(1, Math.min(k, n));
+  const pre = [0];
+  for (const h of hs) pre.push(pre[pre.length - 1] + h);
+  const colH = (i: number, j: number) => pre[j] - pre[i] + gap * (j - i - 1); // items i..j-1
+  // dp[c][j]: best tallest column for the first j items in c columns
+  const dp: number[][] = Array.from({ length: k + 1 }, () => new Array(n + 1).fill(Infinity));
+  const cut: number[][] = Array.from({ length: k + 1 }, () => new Array(n + 1).fill(0));
+  dp[0][0] = 0;
+  for (let c = 1; c <= k; c++)
+    for (let j = c; j <= n; j++)
+      for (let i = c - 1; i < j; i++) {
+        const v = Math.max(dp[c - 1][i], colH(i, j));
+        if (v < dp[c][j]) { dp[c][j] = v; cut[c][j] = i; }
+      }
+  const starts: number[] = [];
+  for (let c = k, j = n; c >= 1; c--) { const i = cut[c][j]; starts.unshift(i); j = i; }
+  return starts;
+}
+
 export const COLLAPSED = { w: 260, h: 74 };
 export const FRAME_PAD = { x: 44, top: 70, bottom: 44 };
 
@@ -217,7 +248,15 @@ export function organize(cards: CardNodeT[], frames: FrameNodeT[], _edges: NoteE
   const size = (id: string) =>
     cardById.has(id)
       ? { w: cardW(cardById.get(id)!), h: fixedH.get(id) ?? fullH.get(id) ?? Math.max(cardById.get(id)!.measured?.height ?? 0, estHeight(cardById.get(id)!)) }
-      : { w: boxes.get(id)!.w + FRAME_PAD.x * 2, h: boxes.get(id)!.h + FRAME_PAD.top + FRAME_PAD.bottom };
+      : frameOuter(id);
+  // a frame's outer size around its laid-out contents (never smaller than the size you gave it by hand)
+  const frameOuter = (id: string) => {
+    const b = boxes.get(id)!, f = frameById.get(id)!;
+    const w = b.w + FRAME_PAD.x * 2, h = b.h + FRAME_PAD.top + FRAME_PAD.bottom;
+    if (!f.data.sized) return { w, h };
+    const s = frameSize(f);
+    return { w: Math.max(w, s.w), h: Math.max(h, s.h) };
+  };
   const nowRect = (id: string): Rect => {
     const n = cardById.get(id) ?? frameById.get(id)!;
     const r = boxRect(n);
@@ -269,15 +308,35 @@ export function organize(cards: CardNodeT[], frames: FrameNodeT[], _edges: NoteE
     const rel = new Map<string, { x: number; y: number }>();
     const CG = 24; // gap between stacked cards
 
-    // a section holding only cards: one column, in order
+    // a section holding only cards: balanced columns, read top to bottom then left to right. As many columns as
+    // bring the frame closest to the screen's shape (a frame you sized by hand: as many as fit its width)
     if (!root && items.every((id) => cardById.has(id))) {
-      let y = 0, w = 0;
-      for (const id of items) {
-        rel.set(id, { x: 0, y });
-        y += sz.get(id)!.h + CG;
-        w = Math.max(w, sz.get(id)!.w);
+      const CX = 40;
+      const fr = frameById.get(cid)!;
+      const maxW = fr.data.sized ? frameSize(fr).w - FRAME_PAD.x * 2 : Infinity;
+      const hs = items.map((id) => sz.get(id)!.h);
+      const lay = (k: number) => {
+        const starts = splitColumns(hs, k, CG);
+        const rel = new Map<string, { x: number; y: number }>();
+        let x = 0, H = 0;
+        starts.forEach((s, c) => {
+          const e = starts[c + 1] ?? items.length;
+          let y = 0, w = 0;
+          for (let i = s; i < e; i++) { rel.set(items[i], { x, y }); y += hs[i] + CG; w = Math.max(w, sz.get(items[i])!.w); }
+          H = Math.max(H, y - CG);
+          x += w + CX;
+        });
+        return { w: Math.max(0, x - CX), h: Math.max(0, H), rel };
+      };
+      const want = screenAspect();
+      let best = lay(1);
+      for (let k = 2; k <= Math.min(items.length, 8); k++) {
+        const cand = lay(k);
+        if (cand.w > maxW) break;
+        const shape = (b: Box) => Math.abs(Math.log((b.w + FRAME_PAD.x * 2) / (b.h + FRAME_PAD.top + FRAME_PAD.bottom) / want));
+        if (fr.data.sized || shape(cand) < shape(best)) best = cand;
       }
-      return { w, h: Math.max(0, y - CG), rel };
+      return best;
     }
 
     // otherwise: units (a frame, or a short stack of consecutive loose cards) placed in rows
@@ -294,7 +353,7 @@ export function organize(cards: CardNodeT[], frames: FrameNodeT[], _edges: NoteE
       } else units.push({ ids: [id], w: s.w, h: s.h });
     }
     const GX = root ? 80 : 40, GY = root ? 90 : 40;
-    const want = root ? 1.7 : 1.4; // target width / height of the whole block
+    const want = root ? 1.7 : screenAspect(); // target width / height of the whole block
     const shelve = (maxW: number) => {
       const rows: Unit[][] = [];
       let x = 0;
@@ -340,7 +399,8 @@ export function organize(cards: CardNodeT[], frames: FrameNodeT[], _edges: NoteE
       if (cardById.has(id)) cardPos.set(id, { x: Math.round(x), y: Math.round(y) });
       else {
         const b = boxes.get(id)!;
-        framePos.set(id, { x: Math.round(x), y: Math.round(y), width: Math.round(b.w + FRAME_PAD.x * 2), height: Math.round(b.h + FRAME_PAD.top + FRAME_PAD.bottom) });
+        const o = frameOuter(id);
+        framePos.set(id, { x: Math.round(x), y: Math.round(y), width: Math.round(o.w), height: Math.round(o.h) });
         place(b, x + FRAME_PAD.x, y + FRAME_PAD.top);
       }
     }
