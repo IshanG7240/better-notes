@@ -260,7 +260,7 @@ ipcMain.handle("ai:agent", async (e, req) => {
       const r = req.mode === "dump"
         ? await runImport({ text: req.text ?? "", detail: req.detail, boardTitles: (req.board?.nodes ?? []).map((n) => n.title) }, cfg, emit, ctl.signal)
         : req.mode === "condense" ? await runCondense(req.arrange, cfg, emit, ctl.signal)
-        : await runArrange(req.arrange, cfg, emit, ctl.signal);
+        : await runArrange({ ...req.arrange, history: req.history ?? [] }, cfg, emit, ctl.signal);
       return { ok: true, data: r.data, usage: await recordUsage(cfg.model, r.usage, cfg.budget) };
     }
     // other boards in the same group (never all boards), slimmed down to cards + links

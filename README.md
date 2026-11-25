@@ -51,7 +51,7 @@ Enter / Esc = accept / reject AI suggestions · Del = delete · Ctrl +/−/0 = z
 
 Layout tools, gentlest first:
 
-- **Space out** (Ctrl+E): only nudges apart cards and frames that overlap or sit too close; nothing else moves, frames grow to keep their cards.
+- **Space out** (Ctrl+E): only nudges apart cards and frames that overlap or sit too close; nothing else moves, frames fit snugly around their cards.
 - **Line up** (Ctrl+L): lines up linked cards as a flow, fixes overlaps, fits frames to their cards; things stay roughly in place.
 - **Pack** (Ctrl+Shift+L): rearranges everything tightly in reading order (or just the selected frame).
 

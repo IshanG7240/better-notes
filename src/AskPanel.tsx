@@ -81,7 +81,7 @@ export default function AskPanel() {
         )}
         {log.map((e) => (
           <div key={e.id} className="ask-turn">
-            <div className="ask-q">{e.q}</div>
+            <div className="ask-q" title={e.full}>{e.q}</div>
             <div className={`ask-a${e.error ? " err" : ""}`}><Rich text={e.a} /></div>
             {!e.error && (undo?.entryId === e.id || e.added > 0 || e.edited > 0 || e.links > 0 || (e.removed ?? 0) > 0 || (e.unlinked ?? 0) > 0 || (e.grouped ?? 0) > 0 || e.steps > 0) && (
               <div className="ask-meta">

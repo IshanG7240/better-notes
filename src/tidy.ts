@@ -1,9 +1,16 @@
 import dagre from "@dagrejs/dagre";
 import { fullH } from "./heights";
 import { boxRect, cardW, estHeight, FRAME_PAD, frameSize, parentMap, readingOrder } from "./layout";
-import { isCard, isFrame, type AppNode, type NoteEdge } from "./types";
+import { isCard, isFrame, type AppNode, type FrameNodeT, type NoteEdge } from "./types";
 
 type R = { x: number; y: number; w: number; h: number };
+const FRAME_MIN_W = 260;
+/** The frame box that fits snugly around these rects (padding included). */
+const wrap = (rs: R[]): R => {
+  const x = Math.min(...rs.map((r) => r.x)) - FRAME_PAD.x, y = Math.min(...rs.map((r) => r.y)) - FRAME_PAD.top;
+  const x2 = Math.max(...rs.map((r) => r.x + r.w)) + FRAME_PAD.x, y2 = Math.max(...rs.map((r) => r.y + r.h)) + FRAME_PAD.bottom;
+  return { x, y, w: Math.max(x2 - x, FRAME_MIN_W), h: y2 - y };
+};
 
 /**
  * Gentle, context-aware tidy. Things stay roughly where you put them:
@@ -47,10 +54,11 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
   const containers = ["", ...nodes.filter((n) => isFrame(n) && !n.data.collapsed).map((n) => n.id)].sort((a, b) => (b ? depth(b) + 1 : 0) - (a ? depth(a) + 1 : 0));
 
   for (const c of containers) {
-    if (c && locked.has(c)) continue;
     const items = kids.get(c) ?? [];
     if (!items.length) continue;
     const root = c === "";
+    // a frame holding a pinned card keeps its contents where they are, but still fits around them
+    if (c && locked.has(c)) { rect.set(c, wrap(items.map((id) => rect.get(id)!))); continue; }
 
     // 1) flow: link clusters among the loose cards of this container
     const cardItems = new Set(items.filter((id) => solid(id) && !locked.has(id)));
@@ -107,12 +115,7 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
     }
 
     // 3) a frame wraps what is inside it
-    if (!root) {
-      const rs = items.map((id) => rect.get(id)!);
-      const x = Math.min(...rs.map((r) => r.x)) - FRAME_PAD.x, y = Math.min(...rs.map((r) => r.y)) - FRAME_PAD.top;
-      const x2 = Math.max(...rs.map((r) => r.x + r.w)) + FRAME_PAD.x, y2 = Math.max(...rs.map((r) => r.y + r.h)) + FRAME_PAD.bottom;
-      rect.set(c, { x, y, w: Math.max(x2 - x, 260), h: y2 - y });
-    }
+    if (!root) rect.set(c, wrap(items.map((id) => rect.get(id)!)));
   }
 
   const pos = new Map<string, { x: number; y: number }>();
@@ -136,7 +139,7 @@ const GAP_IN = 24;
  * "Space out": the gentlest layout. Only things that overlap or sit closer than the gap move, and only
  * as far as needed. Each crowded pair moves apart half each, along whichever axis needs less movement
  * (pinned things don't move; the other side takes the whole push). Frames move as a block with
- * everything inside them, and grow (never shrink) to keep their contents inside. Works inside-out.
+ * everything inside them, and fit snugly around their contents. Works inside-out.
  */
 export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<string, number> = new Map()) {
   const pm = parentMap(nodes);
@@ -210,14 +213,8 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
       }
       placed.push(id);
     }
-    // 3) a frame grows (never shrinks) so everything inside keeps its place in it
-    if (c) {
-      const f = rect.get(c)!;
-      const rs = items.map((id) => rect.get(id)!);
-      const x = Math.min(f.x, ...rs.map((r) => r.x - FRAME_PAD.x)), y = Math.min(f.y, ...rs.map((r) => r.y - FRAME_PAD.top));
-      const x2 = Math.max(f.x + f.w, ...rs.map((r) => r.x + r.w + FRAME_PAD.x)), y2 = Math.max(f.y + f.h, ...rs.map((r) => r.y + r.h + FRAME_PAD.bottom));
-      rect.set(c, { x, y, w: x2 - x, h: y2 - y });
-    }
+    // 3) the frame fits snugly around what is inside it (grows or shrinks; the contents don't move)
+    if (c) rect.set(c, wrap(items.map((id) => rect.get(id)!)));
   }
 
   const pos = new Map<string, { x: number; y: number }>();
@@ -231,4 +228,30 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
     }
   }
   return { pos, size };
+}
+
+/**
+ * Fit frames around their contents without moving anything else (inside-out, so nested frames fit first).
+ * `only`: limit to these frames. Returns new boxes for the frames that change.
+ */
+export function fitFrames(nodes: AppNode[], only?: Set<string>, fixedH: Map<string, number> = new Map()) {
+  const pm = parentMap(nodes);
+  const rect = new Map<string, R>();
+  for (const n of nodes) {
+    const b = boxRect(n);
+    rect.set(n.id, isCard(n) ? { x: b.x, y: b.y, w: cardW(n), h: fixedH.get(n.id) ?? fullH.get(n.id) ?? Math.max(n.measured?.height ?? 0, estHeight(n)) } : { ...b, h: fixedH.get(n.id) ?? b.h });
+  }
+  const kids = new Map<string, string[]>();
+  for (const n of nodes) { const p = pm.get(n.id); if (p) kids.set(p, [...(kids.get(p) ?? []), n.id]); }
+  const depth = (id: string) => { let d = 0, p = pm.get(id); while (p) { d++; p = pm.get(p); } return d; };
+  const frames = nodes.filter((n) => isFrame(n) && !n.data.collapsed && (kids.get(n.id)?.length ?? 0) > 0).sort((a, b) => depth(b.id) - depth(a.id));
+  const out = new Map<string, { x: number; y: number; width: number; height: number }>();
+  for (const f of frames) {
+    const r = wrap(kids.get(f.id)!.map((id) => rect.get(id)!));
+    rect.set(f.id, r);
+    if (only && !only.has(f.id)) continue;
+    const s = frameSize(f as FrameNodeT);
+    if ([r.x - f.position.x, r.y - f.position.y, r.w - s.w, r.h - s.h].some((d) => Math.abs(d) >= 1)) out.set(f.id, { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.w), height: Math.round(r.h) });
+  }
+  return out;
 }

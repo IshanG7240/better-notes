@@ -38,7 +38,7 @@ import { aggregateEdges, collapsedOwners } from "./lines";
 import { spawnPoint } from "./spawn";
 import { CARD_W, setCardDefault, cardW, FRAME_PAD, boxRect, descendants, estHeight, frameSize, layoutNew, membersOf, organize, COLLAPSED, parentMap, readingOrder } from "./layout";
 import { fullH } from "./heights";
-import { spaceOut, tidy } from "./tidy";
+import { spaceOut, tidy, fitFrames } from "./tidy";
 import { flowEdges, isLinkType, type LinkType } from "./linktypes";
 
 const uid = () => crypto.randomUUID().slice(0, 8);
@@ -191,7 +191,7 @@ interface State {
   groupSelection(): void;
   movePositions(pos: Map<string, { x: number; y: number }>): void;
   /** "Line up" (default): keep places, flow linked clusters, push overlaps apart, fit frames. "space": only un-crowd, frames only grow */
-  organizeLayout(mode?: "space"): void;
+  organizeLayout(mode?: "space", quiet?: boolean): void;
   /** tight reading-order packing of the selected frame(s), else the selected cards, else the whole board */
   compactLayout(second?: boolean, only?: string[]): void;
   ghostCount(): number;
@@ -210,7 +210,7 @@ interface State {
   setAskOpen(b: boolean): void;
   loadAsk(boardId: string): void;
   clearAsk(): void;
-  ask(q: string, opts?: { mode?: string; label?: string; selectedIds?: string[]; text?: string; detail?: ImportDetail; arrange?: unknown }): Promise<void>;
+  ask(q: string, opts?: { mode?: string; label?: string; guided?: boolean; selectedIds?: string[]; text?: string; detail?: ImportDetail; arrange?: unknown }): Promise<void>;
   importDetail: ImportDetail;
   setImportDetail(d: ImportDetail): void;
   cancelAsk(): Promise<void>;
@@ -650,7 +650,7 @@ export const useStore = create<State>()((set, get) => ({
   movePositions: (pos) =>
     set((s) => ({ board: { ...s.board, nodes: s.board.nodes.map((n) => (pos.has(n.id) ? { ...n, position: pos.get(n.id)! } : n)) } })),
 
-  organizeLayout(mode) {
+  organizeLayout(mode, quiet) {
     const { board } = get();
     const { hidden } = collapsedOwners(board.nodes);
     const visible = board.nodes.filter((n) => !hidden.has(n.id));
@@ -665,7 +665,7 @@ export const useStore = create<State>()((set, get) => ({
     const blocks = visible.filter(isFrame).filter((f) => f.data.collapsed);
     const fixedH = new Map(blocks.map((f) => [f.id, COLLAPSED.h]));
     const { pos, size } = mode === "space" ? spaceOut(visible, locked, fixedH) : tidy(visible, flowEdges(aggregateEdges(board.nodes, board.edges)), locked, fixedH);
-    if (!pos.size && !size.size) { set({ note: mode === "space" ? "Everything already has room." : "Already lined up." }); return; }
+    if (!pos.size && !size.size) { if (!quiet) set({ note: mode === "space" ? "Everything already has room." : "Already lined up." }); return; }
     const shift = new Map<string, { dx: number; dy: number }>();
     for (const f of blocks) {
       const np = pos.get(f.id);
@@ -791,6 +791,11 @@ export const useStore = create<State>()((set, get) => ({
     // card heights/widths settle after the first pass renders; lay out once more with the real sizes
     if (!second) { const keep = selFrames.map((f) => f.id); setTimeout(() => get().compactLayout(true, keep.length ? keep : undefined), 400); }
     else if (framed) setTimeout(() => get().organizeLayout(), 300); // a compacted frame changed size: clear any overlap it made
+    else if (lockedFrames.size) {
+      // frames holding a pinned card stayed put; still fit them around what is inside
+      const fit = fitFrames(get().board.nodes.filter((n) => !hidden.has(n.id)), lockedFrames, fixedH);
+      if (fit.size) set((s) => ({ board: { ...s.board, nodes: s.board.nodes.map((n) => { const f = fit.get(n.id); return f ? ({ ...n, position: { x: f.x, y: f.y }, width: f.width, height: f.height } as AppNode) : n; }) } }));
+    }
     setTimeout(() => set({ animating: false }), 600);
   },
 
@@ -895,12 +900,12 @@ export const useStore = create<State>()((set, get) => ({
       if (a === "split" && !targets.length) return void set({ error: "Select the cards you want to split." });
       const what = targets.length ? `${targets.length} selected card${targets.length > 1 ? "s" : ""}` : "the whole board";
       const label = a === "group" ? `Group ${what}` : `Split ${what}`;
-      return get().ask(t ? `${a === "group" ? "Group" : "Split"} ${what}. Guidance: ${t}` : `${a === "group" ? "Group" : "Split"} ${what}.`, { mode: a, label: t ? `${label} — ${t.length > 60 ? t.slice(0, 59) + "…" : t}` : label, selectedIds: targets.map((x) => x.id) });
+      return get().ask(t ? `${a === "group" ? "Group" : "Split"} ${what}. Guidance: ${t}` : `${a === "group" ? "Group" : "Split"} ${what}.`, { mode: a, guided: !!t, label: t ? `${label} — ${t.length > 60 ? t.slice(0, 59) + "…" : t}` : label, selectedIds: targets.map((x) => x.id) });
     }
     if (a === "rewrite") {
       const targets = rewriteTargets(get().board);
       if (!targets.length) return void set({ error: "Select one or more cards (or a group frame) to rewrite." });
-      return get().ask(t ? `Rewrite the selected cards: ${t}` : "Rewrite the selected cards for clarity and concision.", { mode: "rewrite", label: `Rewrite ${targets.length} card${targets.length > 1 ? "s" : ""}${t ? " — " + (t.length > 70 ? t.slice(0, 69) + "…" : t) : ""}`, selectedIds: targets.map((x) => x.id) });
+      return get().ask(t ? `Rewrite the selected cards: ${t}` : "Rewrite the selected cards for clarity and concision.", { mode: "rewrite", guided: !!t, label: `Rewrite ${targets.length} card${targets.length > 1 ? "s" : ""}${t ? " — " + (t.length > 70 ? t.slice(0, 69) + "…" : t) : ""}`, selectedIds: targets.map((x) => x.id) });
     }
     if (a === "expand" && !sel.length) return void set({ error: "Select one or more cards first, then use Expand." });
     const base: Record<string, [string, string]> = {
@@ -910,7 +915,7 @@ export const useStore = create<State>()((set, get) => ({
       connect: ["Suggest links", "Suggest missing links between existing cards."],
     };
     const [label, q] = base[a];
-    await get().ask(t ? `${q} Extra guidance: ${t}` : q, { mode: a, label: t ? `${label} — ${t.length > 70 ? t.slice(0, 69) + "…" : t}` : label });
+    await get().ask(t ? `${q} Extra guidance: ${t}` : q, { mode: a, guided: !!t, label: t ? `${label} — ${t.length > 70 ? t.slice(0, 69) + "…" : t}` : label });
   },
   importDetail: pref<ImportDetail>("importDetail", "normal"),
   setImportDetail(d) { setPref("importDetail", d); set({ importDetail: d }); },
@@ -946,10 +951,12 @@ export const useStore = create<State>()((set, get) => ({
     const grp = (p.groups ?? []).filter((g) => !r.applied.has("g:" + g.title + g.members.join()));
     if (grp.length) {
       grp.forEach((g) => r.applied.add("g:" + g.title + g.members.join()));
-      applyGroups(grp, set, get);
+      // members may be refs of cards staged earlier in this turn
+      const real = grp.map((g) => ({ ...g, members: g.members.map((m) => r.refs.get(m) ?? m) }));
+      applyGroups(real, set, get);
       r.counts.grouped += grp.length;
       r.notes.push(`grouped into frames ${grp.map((g) => `"${g.title}" (${g.members.length})`).join(", ")}`);
-      touched.push(...grp.flatMap((g) => g.members));
+      touched.push(...real.flatMap((g) => g.members));
     }
     const edits = (p.edits ?? []).filter((e) => !r.applied.has("m:" + e.id));
     const dels = (p.deletes ?? []).filter((d) => !r.applied.has("d:" + d.id));
@@ -1042,7 +1049,7 @@ export const useStore = create<State>()((set, get) => ({
     try {
       if (!window.api.ai.agent) throw new Error("The app's background process is out of date. Quit and restart Better Notes.");
       res = await Promise.race([
-        window.api.ai.agent({ question, mode, text: opts.text, detail: opts.detail, arrange: opts.arrange, autonomy: get().agentMode, boardId: board.id, board: { ...serialize(board), groups }, selectedIds, history: get().askLog.filter((e) => !e.error).slice(-8).map((e) => ({ q: e.q, a: e.a, changes: e.changes })) }),
+        window.api.ai.agent({ question, mode, guided: !!opts.guided, text: opts.text, detail: opts.detail, arrange: opts.arrange, autonomy: get().agentMode, boardId: board.id, board: { ...serialize(board), groups }, selectedIds, history: get().askLog.filter((e) => !e.error).slice(-8).map((e) => ({ q: e.full ?? e.q, a: e.a, changes: e.changes })) }),
         new Promise<never>((_, rej) => setTimeout(() => rej(new Error("No response after 3 minutes. If the app was updated, quit and restart it, then try again.")), 180000)),
       ]);
     } catch (err) {
@@ -1051,7 +1058,7 @@ export const useStore = create<State>()((set, get) => ({
     }
     if (get().board.id !== boardId) { set({ asking: false, busy: null, askPending: null, askLive: [] }); return; }
     if (!res.ok) { fail(res.error); return; }
-    const { answer, ops, edits, deletes, unlinks, groups: grp, steps, structure } = res.data;
+    const { answer, ops, edits, deletes, unlinks, groups: grp, steps, structure, trace } = res.data;
     const r = run;
     if (structure && r) applyStructure(structure, r, set, get);
     else if (mode !== "doc") get().applyAgentOps({ nodes: ops.nodes, edges: ops.edges, edits, deletes, unlinks, groups: grp }); // reconcile anything the live stream missed
@@ -1071,6 +1078,8 @@ export const useStore = create<State>()((set, get) => ({
       grouped: c.grouped,
       changes: r?.notes.join("; ").slice(0, 1500) || undefined,
       steps,
+      ...(question !== label ? { full: question.slice(0, 4000) } : {}),
+      ...(trace?.length ? { trace } : {}),
     };
     if (r && (structure?.kind === "arrange" || structure?.kind === "condense")) set({ askUndo: { entryId: entry.id, board: r.snapshot } });
     else if (r && get().agentMode !== "review" && (c.added || c.edited || c.links || c.grouped || (get().agentMode === "full" && (c.removed || c.unlinked)))) set({ askUndo: { entryId: entry.id, board: r.snapshot } });
@@ -1133,7 +1142,9 @@ function arrangeTargets(board: Board) {
   const cards = order.map((id) => cmap.get(id)!);
   const frameOf = new Map<string, string>();
   for (const c of cards) { const f = pm.get(c.id); if (f) frameOf.set(c.id, (byId.get(f) as FrameNodeT).data.title || "Untitled frame"); }
-  return { cards, partial, frameOf, frameTitles: [...new Set(frameOf.values())] };
+  // every open frame, so guidance like "put them in the Integration frame" can name one
+  const frameTitles = [...new Set(visible.filter(isFrame).filter((f) => !f.data.collapsed).map((f) => f.data.title || "Untitled frame"))];
+  return { cards, partial, frameOf, frameTitles };
 }
 
 /** Lay out just these nodes (cards + frames) with organize(), keeping their block's top-left corner. */
@@ -1256,39 +1267,83 @@ function applyStructure(st: StructureResult, r: NonNullable<typeof run>, set: (p
         return m.length > 0 && m.every((c) => arranged.has(c.id)) && !inside.some((n) => isFrame(n) && n.data.collapsed);
       }).map((f) => f.id),
     );
-    const rects = cards.map(boxRect);
-    const ax = Math.min(...rects.map((q) => q.x)), ay = Math.min(...rects.map((q) => q.y));
+    const renamed = new Map(st.renames.map((q) => [q.id, q.title]));
+    const dataOf = (c: CardNodeT) => (renamed.has(c.id) ? { ...c.data, title: renamed.get(c.id)! } : c.data);
+    // a section named like a frame that stays (the user asked to add cards to it): stack its cards under that frame's cards
+    const kept = board.nodes.filter(isFrame).filter((f) => !dropFrames.has(f.id) && !f.data.collapsed && !hidden.has(f.id));
+    const norm = (t: string) => t.trim().toLowerCase();
+    const intoPos = new Map<string, { x: number; y: number }>();
+    const intoBox = new Map<string, { x: number; y: number; width: number; height: number }>();
+    const blockSecs = st.sections.filter((sec) => {
+      const f = kept.find((k) => norm(k.data.title) === norm(sec.title));
+      if (!f) return true;
+      const fr = boxRect(f);
+      const stay = membersOf(f, allCards).filter((c) => !arranged.has(c.id)).map(boxRect);
+      let y = stay.length ? Math.max(...stay.map((q) => q.y + q.h)) + 24 : fr.y + FRAME_PAD.top;
+      let w = fr.w;
+      for (const id of sec.ids) {
+        const c = byId.get(id) as CardNodeT;
+        intoPos.set(id, { x: fr.x + FRAME_PAD.x, y });
+        y += estHeight(c) + 24;
+        w = Math.max(w, cardW(c) + FRAME_PAD.x * 2);
+      }
+      intoBox.set(f.id, { x: fr.x, y: fr.y, width: w, height: Math.max(fr.h, y - 24 + FRAME_PAD.bottom - fr.y) });
+      return false;
+    });
+    const blockCards = cards.filter((c) => !intoPos.has(c.id));
     const pos = new Map<string, { x: number; y: number }>();
     const frames: FrameNodeT[] = [];
     let x = 0;
-    st.sections.forEach((sec) => {
+    blockSecs.forEach((sec) => {
       frames.push(mkFrame(sec.title, x, 0, sec.ids.length));
       sec.ids.forEach((id, i) => pos.set(id, { x: x + FRAME_PAD.x, y: FRAME_PAD.top + i * 400 }));
       x += COLW;
     });
     st.loose.forEach((id, i) => pos.set(id, { x, y: i * 400 }));
-    const renamed = new Map(st.renames.map((q) => [q.id, q.title]));
-    const moved = cards.map((c) => ({ ...c, position: pos.get(c.id)!, data: renamed.has(c.id) ? { ...c.data, title: renamed.get(c.id)! } : c.data }));
-    const { cardPos, framePos } = organize(moved, frames, []);
-    const minX = Math.min(...[...cardPos.values()].map((p) => p.x), ...[...framePos.values()].map((p) => p.x));
-    const minY = Math.min(...[...cardPos.values()].map((p) => p.y), ...[...framePos.values()].map((p) => p.y));
-    const shift = (p: { x: number; y: number }) => ({ x: p.x - minX + ax, y: p.y - minY + ay });
-    const newFrames = frames.map((f) => { const q = framePos.get(f.id)!; return { ...f, position: shift(q), width: q.width, height: q.height }; });
-    const movedById = new Map(moved.map((c) => [c.id, c]));
+    const finalPos = new Map(intoPos);
+    let newFrames: FrameNodeT[] = [];
+    if (blockCards.length) {
+      const rects = blockCards.map(boxRect);
+      let ax = Math.min(...rects.map((q) => q.x)), ay = Math.min(...rects.map((q) => q.y));
+      const moved = blockCards.map((c) => ({ ...c, position: pos.get(c.id)!, data: dataOf(c) }));
+      const { cardPos, framePos } = organize(moved, frames, []);
+      const all = [...[...cardPos.values()].map((p) => ({ x: p.x, y: p.y })), ...[...framePos.values()]];
+      const minX = Math.min(...all.map((p) => p.x)), minY = Math.min(...all.map((p) => p.y));
+      const boxes = [
+        ...moved.map((c) => { const p = cardPos.get(c.id)!; return { x: p.x - minX, y: p.y - minY, w: cardW(c), h: estHeight(c) }; }),
+        ...[...framePos.values()].map((f) => ({ x: f.x - minX, y: f.y - minY, w: f.width, h: f.height })),
+      ];
+      // the new block must not land on what stays put: if it would, park it to the right of everything
+      const stays = board.nodes
+        .filter((n) => !hidden.has(n.id) && !dropFrames.has(n.id) && !arranged.has(n.id) && !(isCard(n) && n.data.ghost))
+        .map((n) => { const q = boxRect(n); const b2 = intoBox.get(n.id); return b2 ? { x: b2.x, y: b2.y, w: b2.width, h: b2.height } : q; });
+      const hits = (dx: number, dy: number) => boxes.some((r) => stays.some((o) => r.x + dx < o.x + o.w + 40 && o.x < r.x + dx + r.w + 40 && r.y + dy < o.y + o.h + 40 && o.y < r.y + dy + r.h + 40));
+      if (stays.length && hits(ax, ay)) {
+        ax = Math.max(...stays.map((o) => o.x + o.w)) + 200;
+        ay = Math.min(...stays.map((o) => o.y));
+      }
+      const shift = (p: { x: number; y: number }) => ({ x: p.x - minX + ax, y: p.y - minY + ay });
+      newFrames = frames.map((f) => { const q = framePos.get(f.id)!; return { ...f, position: shift(q), width: q.width, height: q.height }; });
+      for (const c of moved) finalPos.set(c.id, shift(cardPos.get(c.id)!));
+    }
     set((s) => ({
       board: {
         ...s.board,
         nodes: [
           ...newFrames,
           ...s.board.nodes.filter((n) => !dropFrames.has(n.id)).map((n) => {
-            const m = movedById.get(n.id);
-            return m ? ({ ...n, data: m.data, position: shift(cardPos.get(n.id)!) } as AppNode) : n;
+            const p = finalPos.get(n.id);
+            if (p && isCard(n)) return { ...n, data: dataOf(n), position: p } as AppNode;
+            const b2 = intoBox.get(n.id);
+            return b2 ? ({ ...n, position: { x: b2.x, y: b2.y }, width: b2.width, height: b2.height } as AppNode) : n;
           }),
         ],
       },
     }));
     newFrames.forEach((f) => ids.add(f.id));
-    cards.forEach((c) => ids.add(c.id));
+    blockCards.forEach((c) => ids.add(c.id));
+    // real heights are known after render: fit frames and clear overlaps with whatever stayed put
+    setTimeout(() => get().organizeLayout("space", true), 1400);
     r.counts.grouped += st.sections.length;
     r.counts.edited += st.renames.length;
     r.notes.push(`arranged ${cards.length} cards into sections ${st.sections.map((q) => `"${q.title}" (${q.ids.length})`).join(", ")}`);
@@ -1327,7 +1382,7 @@ function applyGroups(groups: { title: string; members: string[] }[], set: (p: Pa
     }
     return { board: { ...st.board, nodes: [...frames, ...nodes.map((n) => (moved.has(n.id) ? { ...n, position: moved.get(n.id)! } : n))] } };
   });
-  setTimeout(() => get().organizeLayout(), 150);
+  setTimeout(() => get().organizeLayout("space", true), 150);
 }
 
 function applyOps(ops: GraphOps, set: (p: Partial<State> | ((s: State) => Partial<State>)) => void, get: () => State, o: { refs?: Map<string, string>; ghost?: boolean } = {}): string[] {

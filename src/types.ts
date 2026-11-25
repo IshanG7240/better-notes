@@ -61,6 +61,7 @@ export interface BoardMeta {
 
 export interface AgentResult {
   answer: string;
+  trace?: string[];
   ops: GraphOps;
   edits: { id: string; title: string; bullets: string[] }[];
   deletes: { id: string; reason: string }[];
@@ -75,7 +76,7 @@ export type StructureResult =
   | { kind: "arrange"; sections: { title: string; ids: string[] }[]; loose: string[]; renames: { id: string; title: string }[] }
   | { kind: "condense"; merges: { from: string[]; title: string; bullets: string[]; kind: Kind }[] };
 export type ImportDetail = "compact" | "normal" | "detailed";
-export interface AskEntry { id: string; q: string; a: string; t: number; added: number; edited: number; links: number; removed?: number; unlinked?: number; grouped?: number; changes?: string; steps: number; error?: boolean }
+export interface AskEntry { id: string; q: string; a: string; t: number; added: number; edited: number; links: number; removed?: number; unlinked?: number; grouped?: number; changes?: string; steps: number; error?: boolean; /** the full request as sent (q is the short label shown) */ full?: string; /** tool calls of the turn, with errors */ trace?: string[] }
 export interface GraphOps {
   summary: string;
   nodes: { id: string; title: string; bullets: string[]; kind: Kind }[];

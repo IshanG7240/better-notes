@@ -19,6 +19,8 @@ How to work:
 - New cards: title max 8 words; 2-5 bullets, each a terse fragment (max 14 words); kind is idea | question | risk | task | note. Connect every new card to something with a 1-3 word label. Do not duplicate existing cards: search first.
 - Earlier turns of this conversation are included as plain text; they were produced with the same tools. Do not second-guess or apologise for them unless you spot a concrete error.
 - Call independent lookups (search_cards / get_card) together in a single step instead of one at a time.
+- Do EVERY part of the request in this turn (cards, links, frames, edits). Never tell the user to do something one of your tools can do, and never say a tool cannot do something without trying it. Cards you stage this turn can be grouped and linked right away: use their refs (e.g. "c1") as ids in propose_group / propose_links.
+- When the user adds guidance to a button (shown as "Extra guidance" / "Guidance"), it overrides the button's default task: follow it exactly (scope, number of cards, frames, focus).
 - Format: markdown. Short paragraphs or tight bullet lists. No headings unless the answer has several distinct parts.`;
 
 const TOOLS = [
@@ -102,16 +104,16 @@ const TOOLS = [
   },
   {
     name: "propose_group",
-    description: "Put existing cards into labelled frames (groups). Use it to cluster cards by theme, or to split an existing frame into finer sub-groups. Each card goes in at most one new group. 2-5 words per title.",
+    description: "Put cards into labelled frames (groups). Members are existing card ids, or the refs of cards you staged with propose_cards in this turn, or a mix. Use it to cluster cards by theme, to frame new cards together with the card they expand, or to split an existing frame into finer sub-groups. Each card goes in at most one new group. 2-5 words per title.",
     input_schema: {
       type: "object",
-      properties: { groups: { type: "array", items: { type: "object", properties: { title: { type: "string" }, members: { type: "array", items: { type: "string" }, description: "Exact card ids." } }, required: ["title", "members"] } } },
+      properties: { groups: { type: "array", items: { type: "object", properties: { title: { type: "string" }, members: { type: "array", items: { type: "string" }, description: "Exact card ids, or refs of cards staged this turn." } }, required: ["title", "members"] } } },
       required: ["groups"],
     },
   },
   {
     name: "propose_links",
-    description: "Stage new links between EXISTING cards.",
+    description: "Stage new links between cards: existing card ids, or refs of cards staged this turn.",
     input_schema: {
       type: "object",
       properties: {
@@ -134,7 +136,7 @@ const AUTONOMY = {
 const MODES = {
   group: `TASK (button "Group"): Cluster the SELECTED cards (the whole board if none are selected) into meaningful themed groups with propose_group. Read the cards first (get_card on the unclear ones). Aim for 2-6 groups of 2+ cards each, titled in 2-5 words; leave a card ungrouped if it does not fit anywhere. If the selection is already one frame, split it into finer sub-groups. Do not change card text.`,
   split: `TASK (button "Split"): Split each SELECTED card that mixes several distinct ideas into smaller, single-idea cards. For each such card: propose_edit it so it keeps only its first/main idea (and a tighter title), then propose_cards for the other ideas, each linked back to the original card with a short label like "part of" or "from". Leave cards that are already focused alone, and say which. Keep every fact; do not invent content. Do NOT delete the original.`,
-  expand: `TASK (button "Expand"): For each SELECTED card, stage 2-6 child cards with propose_cards that deepen it: sub-points, concrete steps, examples, options or sub-components, whichever fits. Link each child from its parent. Search first so you do not repeat what is already on the board. Then reply with 1-2 sentences saying what you added. If nothing is selected, say so and stage nothing.`,
+  expand: `TASK (button "Expand"): For each SELECTED card, stage 2-6 child cards with propose_cards that deepen it: sub-points, concrete steps, examples, options or sub-components, whichever fits. Link each child from its parent. Search first so you do not repeat what is already on the board. If the user gave extra guidance (a focus, how many cards, put them in a frame, and so on), follow it over these defaults; to frame the new cards, call propose_group with their refs (and the parent card's id if it belongs in the frame). Then reply with 1-2 sentences saying what you added. If nothing is selected, say so and stage nothing.`,
   risks: `TASK (button "Risks"): Act as a sharp devil's advocate on the SELECTED cards (the whole board if nothing is selected). Stage "risk" cards (propose_cards) for what could fail, hidden assumptions and edge cases. Each risk names the failure and has one bullet with a mitigation. Link each to the card it threatens with a label like "threatens". Then reply with 2-3 sentences: which risk worries you most and why.`,
   gaps: `TASK (button "Gaps"): Find what is MISSING from the SELECTED cards (the whole board if nothing is selected): unanswered questions, undefined decisions, missing steps, unclear owners or metrics. Stage them with propose_cards as "question" cards (or "task" when the next action is obvious), linked to the relevant cards. Then reply with 2-3 sentences naming the most important gap.`,
   connect: `TASK (button "Links"): Look ONLY for missing relationships between EXISTING cards. Read the cards that look related (get_card) and stage links with propose_links where a genuine dependency, contradiction, sequence or shared theme exists and no link is there yet. Label each link with its reason in 1-3 words. Be selective: only strong, non-obvious links. Do not create cards. Reply with 1-2 sentences.`,
@@ -146,8 +148,8 @@ const MODES = {
 const RANK = ["low", "medium", "high", "xhigh", "max"];
 const MODE_EFFORT = { rewrite: "low", split: "low", group: "low", expand: "low", connect: "medium", dump: "medium" };
 /** Cheap, mechanical actions don't need the user's full effort setting; never exceed it. */
-function effortFor(mode, user) {
-  const want = MODE_EFFORT[mode];
+function effortFor(mode, user, guided = false) {
+  const want = guided ? null : MODE_EFFORT[mode]; // the user's own instructions get the full effort setting
   if (!want || RANK.indexOf(user) < 0) return user;
   return RANK[Math.min(RANK.indexOf(want), RANK.indexOf(user))];
 }
@@ -178,7 +180,7 @@ const short = (s, n = 60) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 export async function runAgent(req, cfg, emit = () => {}, signal) {
   if (!cfg.apiKey) throw new Error("No API key set. Open Settings and paste your Anthropic API key.");
   const client = new Anthropic({ apiKey: cfg.apiKey });
-  const { question, board, selectedIds = [], history = [], mode = "ask", autonomy = "auto", siblings = [], groupName = "" } = req;
+  const { question, board, selectedIds = [], history = [], mode = "ask", autonomy = "auto", siblings = [], groupName = "", guided = false } = req;
   const sel = new Set(selectedIds);
   const byId = new Map(board.nodes.map((n) => [n.id, n]));
   const groupOf = new Map();
@@ -290,7 +292,9 @@ export async function runAgent(req, cfg, emit = () => {}, signal) {
       }
       const ok = (cards ?? []).length - errors.length;
       if (ok > 0) emit({ text: `Drafted ${ok} new card${ok === 1 ? "" : "s"}`, apply: { nodes: staged.nodes.slice(mark.nodes), edges: staged.edges.slice(mark.edges) } });
-      return errors.length ? { error: `Some cards were rejected: ${errors.join("; ")}. Fix and call again for just those.`, accepted: ok } : `Staged ${ok} card(s).`;
+      const made = staged.nodes.slice(mark.nodes).map((n) => `${n.id} "${n.title}"`).join(", ");
+      const tail = ok ? ` Refs you can use in propose_group / propose_links this turn: ${made}.` : "";
+      return errors.length ? { error: `Some cards were rejected: ${errors.join("; ")}. Fix and call again for just those.${tail}`, accepted: ok } : `Staged ${ok} card(s).${tail}`;
     },
     propose_edit({ id, title, bullets }) {
       const n = card(id);
@@ -328,7 +332,7 @@ export async function runAgent(req, cfg, emit = () => {}, signal) {
       const errors = [];
       const made = [];
       for (const g of groups ?? []) {
-        const members = [...new Set(g.members ?? [])].filter((m) => byId.has(m) && !used.has(m));
+        const members = [...new Set(g.members ?? [])].filter((m) => (byId.has(m) || refs.has(m)) && !used.has(m));
         if (members.length < 2) { errors.push(`"${g.title}": needs at least 2 valid, not-yet-grouped cards`); continue; }
         members.forEach((m) => used.add(m));
         made.push({ title: String(g.title ?? "").trim().slice(0, 40), members });
@@ -341,7 +345,8 @@ export async function runAgent(req, cfg, emit = () => {}, signal) {
       let ok = 0;
       const errors = [];
       for (const l of links ?? []) {
-        if (!byId.has(l.from) || !byId.has(l.to) || l.from === l.to) { errors.push(`${l.from}->${l.to}`); continue; }
+        const known = (id) => byId.has(id) || refs.has(id);
+        if (!known(l.from) || !known(l.to) || l.from === l.to) { errors.push(`${l.from}->${l.to}`); continue; }
         staged.edges.push({ from: l.from, to: l.to, label: l.label ?? "", type: l.type });
         ok++;
       }
@@ -375,7 +380,7 @@ export async function runAgent(req, cfg, emit = () => {}, signal) {
       tools: siblings.length ? [...TOOLS, ...GROUP_TOOLS] : TOOLS,
       messages,
       ...(cfg.model.includes("haiku") ? {} : { thinking: { type: "adaptive" } }),
-      output_config: { effort: effortFor(mode, cfg.effort) },
+      output_config: { effort: effortFor(mode, cfg.effort, guided) },
     }, { signal });
     let acc = "";
     let last = 0;
@@ -388,7 +393,7 @@ export async function runAgent(req, cfg, emit = () => {}, signal) {
     const res = await stream.finalMessage();
     if (acc) emit({ stream: acc });
     for (const k of Object.keys(usage)) usage[k] += res.usage?.[k] ?? 0;
-    if (process.env.BN_DEBUG) console.log("[agent]", mode, "step", step, JSON.stringify({ in: res.usage?.input_tokens, out: res.usage?.output_tokens, cw: res.usage?.cache_creation_input_tokens, cr: res.usage?.cache_read_input_tokens, effort: effortFor(mode, cfg.effort) }));
+    if (process.env.BN_DEBUG) console.log("[agent]", mode, "step", step, JSON.stringify({ in: res.usage?.input_tokens, out: res.usage?.output_tokens, cw: res.usage?.cache_creation_input_tokens, cr: res.usage?.cache_read_input_tokens, effort: effortFor(mode, cfg.effort, guided) }));
     if (res.stop_reason === "refusal") throw new Error("The model declined this request.");
     messages.push({ role: "assistant", content: res.content });
     const text = res.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
@@ -407,12 +412,12 @@ export async function runAgent(req, cfg, emit = () => {}, signal) {
         out = { error: String(err?.message || err) };
       }
       const isErr = typeof out === "object" && out && "error" in out;
-      trace.push({ tool: b.name, ok: !isErr });
+      trace.push(`${b.name}${isErr ? ` ✗ ${String(out.error).slice(0, 160)}` : " ✓"}`);
       results.push({ type: "tool_result", tool_use_id: b.id, content: typeof out === "string" ? out : JSON.stringify(out), ...(isErr ? { is_error: true } : {}) });
     }
     messages.push({ role: "user", content: results });
     if (step === 9) answer = answer || "I ran out of steps before finishing. Try a narrower question.";
   }
 
-  return { data: { answer: answer || "(No answer.)", ops: { summary: "", nodes: staged.nodes, edges: staged.edges }, edits: staged.edits, deletes: staged.deletes, unlinks: staged.unlinks, groups: staged.groups, steps: trace.length }, usage };
+  return { data: { answer: answer || "(No answer.)", ops: { summary: "", nodes: staged.nodes, edges: staged.edges }, edits: staged.edits, deletes: staged.deletes, unlinks: staged.unlinks, groups: staged.groups, steps: trace.length, trace }, usage };
 }

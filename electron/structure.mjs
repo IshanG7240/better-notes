@@ -35,7 +35,12 @@ Rules:
 - Inside each section, order the card ids in reading order.
 - Use every card id exactly once. Put a card in "loose" only if it truly fits nowhere (rare).
 - If the cards already sit in sensible sections (shown as "current frame"), keep those sections and their names unless they are clearly wrong.
-- Do not rewrite cards; you only choose sections and order.`;
+- Do not rewrite cards; you only choose sections and order.
+
+The user's guidance (if any) comes first and overrides the rules above:
+- If it limits the arrange to some cards ("only the new cards", "those 8 cards", "just the SYSPRO ones"), put ONLY those cards in sections and list every other id in "untouched". Untouched cards stay exactly where they are, in their current frames. Use the recent conversation to work out which cards the user means: it lists the ids of cards added or changed in earlier turns.
+- If it asks to put cards into an existing frame, use that frame's exact title (from "Current frames") as the section title; the cards are added to that frame.
+- Otherwise "untouched" is empty.`;
 
 const LINK_SYSTEM = `You add the few links that matter between note cards on a board. Output JSON only, matching the schema.
 - Only strong, explicit relationships. Do NOT link cards just because they are in the same section; sections already group them.
@@ -103,8 +108,9 @@ const ARRANGE_SCHEMA = {
       },
     },
     loose: { type: "array", items: { type: "string" } },
+    untouched: { type: "array", items: { type: "string" } },
   },
-  required: ["sections", "loose"],
+  required: ["sections", "loose", "untouched"],
 };
 
 const LINK_SCHEMA = {
@@ -326,7 +332,11 @@ export async function runImport({ text, detail = "normal", boardTitles = [] }, c
   return { data: { answer, structure: { kind: "import", ...merged, links }, ops: { summary: "", nodes: [], edges: [] }, steps: parts.length + (n >= 4 ? 1 : 0) }, usage };
 }
 
-export async function runArrange({ cards, frames = [] }, cfg, emit, signal) {
+/** The last few assistant turns as plain text, so follow-ups like "those 8 cards" can be resolved. */
+const recentTurns = (history = []) =>
+  history.slice(-3).map((h) => `- User: ${String(h.q).slice(0, 600)}\n  Assistant: ${String(h.a ?? "").slice(0, 400)}${h.changes ? `\n  Changes made: ${String(h.changes).slice(0, 1500)}` : ""}`).join("\n");
+
+export async function runArrange({ cards, frames = [], guidance = "", history = [] }, cfg, emit, signal) {
   if (!cfg.apiKey) throw new Error("No API key set. Open Settings and paste your Anthropic API key.");
   if (cards.length < 3) throw new Error("Arrange needs at least 3 cards.");
   const client = new Anthropic({ apiKey: cfg.apiKey });
@@ -335,19 +345,23 @@ export async function runArrange({ cards, frames = [] }, cfg, emit, signal) {
   const list = cards.map((c) => `[${c.id}] (${c.kind}) ${c.title || "(untitled)"}${c.frame ? `  — current frame "${c.frame}"` : ""}\n   ${c.bullets.split("\n").filter(Boolean).slice(0, 3).join(" · ").slice(0, 200)}`).join("\n");
   const out = await callJson(client, cfg, {
     system: ARRANGE_SYSTEM,
-    user: `${frames.length ? `Current frames: ${frames.map((f) => `"${f}"`).join(", ")}\n` : ""}Cards in their current reading order:\n${list}`,
+    user: `${guidance ? `USER GUIDANCE (follow it): ${guidance}\n\n` : ""}${history.length ? `Recent conversation:\n${recentTurns(history)}\n\n` : ""}${frames.length ? `Current frames: ${frames.map((f) => `"${f}"`).join(", ")}\n` : ""}Cards in their current reading order:\n${list}`,
     schema: ARRANGE_SCHEMA,
     effort: capEffort("medium", cfg.effort),
   }, signal, usage);
   // layer 3: every card exactly once; anything missed goes to loose
   const valid = new Set(cards.map((c) => c.id));
   const used = new Set();
+  // cards the guidance leaves out stay where they are (only if something is still being arranged)
+  const keep = new Set((out.untouched ?? []).filter((id) => valid.has(id)));
+  for (const s of out.sections ?? []) for (const id of s.ids ?? []) keep.delete(id);
+  if (keep.size >= cards.length) keep.clear();
   const sections = [];
   for (const s of out.sections ?? []) {
     const ids = (s.ids ?? []).filter((id) => valid.has(id) && !used.has(id) && used.add(id));
     if (ids.length) sections.push({ title: String(s.title ?? "").trim().slice(0, 60) || "Notes", ids });
   }
-  const loose = cards.map((c) => c.id).filter((id) => !used.has(id));
+  const loose = cards.map((c) => c.id).filter((id) => !used.has(id) && !keep.has(id));
   const byId = new Map(cards.map((c) => [c.id, c]));
   const renames = [];
   for (const s of sections) {
@@ -355,7 +369,8 @@ export async function runArrange({ cards, frames = [] }, cfg, emit, signal) {
     stripPrefixes(s.title, titles).forEach((t, i) => { if (t !== titles[i]) renames.push({ id: s.ids[i], title: t }); });
   }
   emit({ text: `Arranged into ${sections.length} sections` });
-  const answer = `Arranged ${cards.length - loose.length} cards into ${sections.length} section${sections.length === 1 ? "" : "s"}${loose.length ? ` (${loose.length} left loose)` : ""}.`;
+  const n = cards.length - loose.length - keep.size;
+  const answer = `Arranged ${n} card${n === 1 ? "" : "s"} into ${sections.length} section${sections.length === 1 ? "" : "s"}${sections.length ? ` (${sections.map((s) => `“${s.title}”`).join(", ")})` : ""}${loose.length ? `, ${loose.length} left loose` : ""}${keep.size ? `. Left the other ${keep.size} card${keep.size === 1 ? "" : "s"} where they were` : ""}.`;
   return { data: { answer, structure: { kind: "arrange", sections, loose, renames }, ops: { summary: "", nodes: [], edges: [] }, steps: 1 }, usage };
 }
 
