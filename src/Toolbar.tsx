@@ -67,7 +67,6 @@ export default function Toolbar() {
   const nodes = useStore((s) => s.board.nodes);
   const selCards = nodes.filter((n) => n.selected && isCard(n));
   const selBoxes = nodes.filter((n) => n.selected).length;
-  const selFrames = nodes.some((n) => n.selected && n.type === "frame");
   const rewritable = useStore((s) => rewriteTargets(s.board).length);
   const ghosts = useStore((s) => s.board.nodes.filter((n) => isCard(n) && (n.data.ghost || n.data.proposal || n.data.del)).length + s.board.edges.filter((e) => e.data?.ghost || e.data?.del).length);
   const canUndo = useStore((s) => s.canUndo);
@@ -98,21 +97,21 @@ export default function Toolbar() {
           <Btn
             icon="spread"
             label="Space out"
-            hint={{ what: "Gives every card and frame some personal space: anything overlapping or too close gets nudged apart, just enough. Frames fit snugly around their cards.", keeps: "Nothing else moves. Pinned cards stay put. The gentlest option.", keys: "Ctrl+E" }}
+            hint={{ what: "Gives every card and frame some personal space: anything overlapping or too close gets nudged apart, just enough. Frames fit snugly around their cards.", keeps: "Nothing else moves. Pinned cards stay put. With something selected: only that (and inside selected frames).", keys: "Ctrl+E" }}
             onClick={() => st.organizeLayout("space")}
           />
           <Btn
             icon="organize"
             label="Line up"
-            hint={{ what: "Lines up cards joined by links (3 or more) into a neat flow, fixes overlaps, and resizes frames to fit their cards.", keeps: "Things stay roughly where you put them. Pinned cards stay put.", keys: "Ctrl+L" }}
+            hint={{ what: "Lines up cards joined by links (3 or more) into a neat flow, fixes overlaps, and resizes frames to fit their cards.", keeps: "Things stay roughly where you put them. Pinned cards stay put. With something selected: only that (and inside selected frames).", keys: "Ctrl+L" }}
             onClick={() => st.organizeLayout()}
           />
           <Btn
             icon="compact"
             label="Pack"
             hint={{
-              what: selFrames ? "Rearranges the selected frame tightly: its cards stacked in reading order." : "Rearranges the whole board tightly: frames side by side as sections, cards stacked in reading order.",
-              keeps: "Keeps the reading order, not the positions. Pinned cards stay put. Select a frame to pack only that.",
+              what: selBoxes ? "Rearranges what is selected tightly: selected frames, and selected cards together with the other selected cards of their frame." : "Rearranges the whole board tightly: frames side by side as sections, cards stacked in reading order.",
+              keeps: "Keeps the reading order, not the positions. Pinned cards stay put (and so does a frame holding one).",
               keys: "Ctrl+Shift+L",
             }}
             onClick={() => st.compactLayout()}

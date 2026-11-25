@@ -351,7 +351,7 @@ const HELP: { id: string; icon: string; label: string; body: ReactNode }[] = [
   { id: "layout", icon: "spread", label: "Tidying up", body: (
     <>
       <h4>Tidying up</h4>
-      <p>Three layout tools, gentlest first. Frames always fit their cards afterwards, and pinned cards never move.</p>
+      <p>Three layout tools, gentlest first. Frames always fit their cards afterwards, and pinned cards never move. Every tool (and every AI action) works the same way: <b>with something selected</b>, only on the selected cards and frames (and everything inside selected frames); <b>with nothing selected</b>, on the whole board. If something is left out, a note says what and why.</p>
       <ul>
         <li><b>Space out</b> <K k="Ctrl+E" />: only nudges apart things that overlap or sit too close.</li>
         <li><b>Line up</b> <K k="Ctrl+L" />: lines up linked cards as a flow and fixes overlaps; things stay roughly in place.</li>

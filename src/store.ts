@@ -194,14 +194,16 @@ interface State {
   addFrame(pos: { x: number; y: number }): void;
   groupSelection(): void;
   movePositions(pos: Map<string, { x: number; y: number }>): void;
-  /** "Line up" (default): keep places, flow linked clusters, push overlaps apart, fit frames. "space": only un-crowd, frames only grow */
-  organizeLayout(mode?: "space", quiet?: boolean): void;
+  /** "Line up" (default): keep places, flow linked clusters, push overlaps apart, fit frames. "space": only un-crowd.
+   *  Works on `only` (ids; [] = the whole board), else on the selection, else on the whole board: see layoutScope */
+  organizeLayout(mode?: "space", quiet?: boolean, only?: string[]): void;
   /** after a drop or new cards: frames grow to hold them and close neighbours move aside (nothing else moves) */
   makeRoom(ids: string[]): void;
   /** a drag ended with the cursor over `target` (a frame, or null for open canvas): what was dragged moves fully into it (or out of
    *  frames it doesn't belong to), then makeRoom */
   dropInto(ids: string[], target: string | null, cursor?: { x: number; y: number }): void;
-  /** tight reading-order packing of the selected frame(s), else the selected cards, else the whole board */
+  /** tight reading-order packing of `only` ([] = the whole board), else the selection (selected frames, and selected cards
+   *  with the other selected cards of their frame), else the whole board */
   compactLayout(second?: boolean, only?: string[]): void;
   ghostCount(): number;
   acceptGhosts(id?: string, withDeletes?: boolean): void;
@@ -361,7 +363,7 @@ export const useStore = create<State>()((set, get) => ({
     setPref("cardDefault", n);
     setCardDefault(n);
     set({ cardDefault: n });
-    setTimeout(() => get().organizeLayout(), 300);
+    setTimeout(() => get().organizeLayout(undefined, false, []), 300);
   },
   pinchSpeed: pref("pinchSpeed", 1),
   setPinchSpeed(n) {
@@ -384,7 +386,7 @@ export const useStore = create<State>()((set, get) => ({
     set({ zoomSpeed: n });
   },
   fontFamily: (() => { const f = pref<"sans" | "serif" | "mono">("fontFamily", "sans"); document.documentElement.dataset.font = f; return f; })(),
-  setFontFamily(f) { setPref("fontFamily", f); document.documentElement.dataset.font = f; set({ fontFamily: f }); setTimeout(() => get().organizeLayout(), 300); },
+  setFontFamily(f) { setPref("fontFamily", f); document.documentElement.dataset.font = f; set({ fontFamily: f }); setTimeout(() => get().organizeLayout(undefined, false, []), 300); },
   fontScale: pref("fontScale", 1),
   setFontScale(n) {
     const v = Math.round(Math.max(0.7, Math.min(1.8, n)) * 100) / 100;
@@ -448,7 +450,7 @@ export const useStore = create<State>()((set, get) => ({
     }
     if (guide) { first = guide; seeded = true; set({ fitOnly: ["gf0", "gf1"] }); }
     set((st) => ({ boards, board: first!, fitTick: st.fitTick + 1 }));
-    if (seeded) setTimeout(() => get().organizeLayout(), 1200); // sample positions predate the wider default cards
+    if (seeded) setTimeout(() => get().organizeLayout(undefined, false, []), 1200); // sample positions predate the wider default cards
     if (!settings.hasKey) set({ modal: "settings" });
   },
 
@@ -474,7 +476,7 @@ export const useStore = create<State>()((set, get) => ({
     await window.api.boards.save(gb);
     set((st) => ({ board: gb, modal: null, fitOnly: ["gf0", "gf1"], fitTick: st.fitTick + 1 }));
     set({ boards: await window.api.boards.list() });
-    setTimeout(() => get().organizeLayout(), 1200);
+    setTimeout(() => get().organizeLayout(undefined, false, []), 1200);
   },
   async addSampleBoard() {
     await stopAskForSwitch(get);
@@ -483,7 +485,7 @@ export const useStore = create<State>()((set, get) => ({
     await window.api.boards.save(sb);
     set((st) => ({ board: sb, boards: st.boards, fitTick: st.fitTick + 1 }));
     set({ boards: await window.api.boards.list() });
-    setTimeout(() => get().organizeLayout(), 1200);
+    setTimeout(() => get().organizeLayout(undefined, false, []), 1200);
   },
   async openBoard(id) {
     if (id === get().board.id) return;
@@ -573,7 +575,7 @@ export const useStore = create<State>()((set, get) => ({
         board: { ...s.board, nodes: s.board.nodes.map((n) => (isCard(n) && (!anySel || n.selected) ? ({ ...n, width: fit(n.data) } as AppNode) : n)) },
       };
     });
-    setTimeout(() => get().organizeLayout(), 300); // widths changed: re-flow so nothing overlaps
+    setTimeout(() => get().organizeLayout(undefined, false, []), 300); // widths changed: re-flow so nothing overlaps
   },
   setCardWidth(w) {
     set((s) => {
@@ -582,7 +584,7 @@ export const useStore = create<State>()((set, get) => ({
         board: { ...s.board, nodes: s.board.nodes.map((n) => (isCard(n) && (!anySel || n.selected) ? ({ ...n, width: w, measured: undefined } as AppNode) : n)) },
       };
     });
-    setTimeout(() => get().organizeLayout(), 300); // widths changed: re-flow so nothing overlaps
+    setTimeout(() => get().organizeLayout(undefined, false, []), 300); // widths changed: re-flow so nothing overlaps
   },
   togglePin(id) {
     set((s) => {
@@ -805,23 +807,19 @@ export const useStore = create<State>()((set, get) => ({
     }));
     setTimeout(() => set({ animating: false }), 450);
   },
-  organizeLayout(mode, quiet) {
+  organizeLayout(mode, quiet, only) {
     settleUndo();
     const { board } = get();
     const { hidden } = collapsedOwners(board.nodes);
     const visible = board.nodes.filter((n) => !hidden.has(n.id));
-    const pm = parentMap(visible);
-    const locked = new Set<string>();
-    for (const n of visible) {
-      if (!(isCard(n) && n.data.pinned)) continue;
-      locked.add(n.id);
-      let p = pm.get(n.id);
-      while (p) { locked.add(p); p = pm.get(p); }
-    }
+    const sc = layoutScope(visible, only);
     const blocks = visible.filter(isFrame).filter((f) => f.data.collapsed);
     const fixedH = new Map(blocks.map((f) => [f.id, COLLAPSED.h]));
-    const { pos, size } = mode === "space" ? spaceOut(visible, locked, fixedH) : tidy(visible, flowEdges(aggregateEdges(board.nodes, board.edges)), locked, fixedH);
-    if (!pos.size && !size.size) { if (!quiet) set({ note: mode === "space" ? "Everything already has room." : "Already lined up." }); return; }
+    const { pos, size } = mode === "space"
+      ? spaceOut(visible, sc.fixed, fixedH, { fitOnly: sc.fitOnly })
+      : tidy(visible, flowEdges(aggregateEdges(board.nodes, board.edges)), sc.fixed, fixedH, sc.fitOnly);
+    const pinNote = sc.pinned ? ` ${sc.pinned} pinned card${sc.pinned > 1 ? "s" : ""} stayed put.` : "";
+    if (!pos.size && !size.size) { if (!quiet) set({ note: (mode === "space" ? "Everything already has room." : "Already lined up.") + pinNote }); return; }
     const shift = new Map<string, { dx: number; dy: number }>();
     for (const f of blocks) {
       const np = pos.get(f.id);
@@ -829,7 +827,7 @@ export const useStore = create<State>()((set, get) => ({
     }
     set((s) => ({
       animating: true,
-      note: null,
+      note: quiet ? s.note : pinNote.trim() || null,
       board: {
         ...s.board,
         nodes: s.board.nodes.map((n) => {
@@ -847,62 +845,75 @@ export const useStore = create<State>()((set, get) => ({
     const { hidden } = collapsedOwners(board.nodes);
     const visible = board.nodes.filter((n) => !hidden.has(n.id));
     const pm = parentMap(visible);
-    // pinned cards never move; a pinned card also locks the frames around it and everything inside them
+    // pinned cards never move. Pack re-flows a whole frame, so a frame holding a pinned card is left as it is
     const lockedFrames = new Set<string>();
     for (const n of visible) {
       if (!(isCard(n) && n.data.pinned)) continue;
-      let p = pm.get(n.id);
-      while (p) {
-        lockedFrames.add(p);
-        p = pm.get(p);
-      }
+      for (let p = pm.get(n.id); p; p = pm.get(p)) lockedFrames.add(p);
     }
     const locked = new Set<string>();
     for (const n of visible) {
       if (isCard(n) && n.data.pinned) locked.add(n.id);
-      let p = pm.get(n.id);
-      while (p) {
-        if (lockedFrames.has(p)) locked.add(n.id);
-        p = pm.get(p);
-      }
+      for (let p = pm.get(n.id); p; p = pm.get(p)) if (lockedFrames.has(p)) locked.add(n.id);
     }
     for (const f of lockedFrames) locked.add(f);
     // a collapsed frame holding a pinned card is locked too
     for (const f of visible.filter(isFrame))
       if (f.data.collapsed && (f.data.members ?? []).some((m) => board.nodes.some((x) => x.id === m && isCard(x) && x.data.pinned))) locked.add(f.id);
 
-    // scope: selected frame(s) and everything inside them; else selected cards; else the whole board
-    const selFrames = (only ? visible.filter((n) => only.includes(n.id)) : visible.filter((n) => n.selected)).filter(isFrame).filter((f) => !f.data.collapsed && !locked.has(f.id));
+    // the same rule as the other tools: `only` ([] = the whole board), else the selection, else the whole board
+    const ids = only ?? visible.filter((n) => n.selected).map((n) => n.id);
+    const sel = ids.map((id) => visible.find((n) => n.id === id)).filter((n): n is AppNode => !!n);
+    const whole = sel.length === 0;
+    const selFrames = sel.filter(isFrame).filter((f) => !f.data.collapsed);
     const inScope = new Set<string>();
     for (const f of selFrames) { inScope.add(f.id); for (const d of descendants(f, visible)) inScope.add(d.id); }
-    const framed = selFrames.length > 0;
-    const cards = visible.filter(isCard).filter((n) => !locked.has(n.id)).filter((n) => !framed || inScope.has(n.id));
-    const selCards = framed ? [] : cards.filter((n) => n.selected);
-    const partial = selCards.length > 1;
-    // collapsed frames take part as fixed-size blocks; their hidden members travel with them
-    const blocks = partial ? [] : visible.filter(isFrame).filter((f) => f.data.collapsed && !locked.has(f.id) && (!framed || inScope.has(f.id)));
-    const pseudo: CardNodeT[] = blocks.map((f) => ({
-      id: f.id,
-      type: "card",
-      position: f.position,
-      data: { title: f.data.title, bullets: "", kind: "note" },
-    }));
-    const target = partial ? selCards : [...cards, ...pseudo];
-    if (target.length < 2) {
-      set({ note: locked.size ? "Nothing to organize — everything else is pinned." : null });
+    const inside = (n: AppNode) => whole || inScope.has(n.id);
+    // what Pack had to leave alone, for the note
+    const leftCards = visible.filter(isCard).filter((n) => locked.has(n.id) && (inside(n) || sel.includes(n))).length;
+    const leftFrames = visible.filter(isFrame).filter((f) => lockedFrames.has(f.id) && (inside(f) || sel.includes(f))).length;
+
+    const edges = flowEdges(aggregateEdges(board.nodes, board.edges));
+    const cardPos = new Map<string, { x: number; y: number }>();
+    const framePos = new Map<string, { x: number; y: number; width: number; height: number }>();
+    const fixedH = new Map<string, number>();
+    let blocks: FrameNodeT[] = [];
+    // the whole board, or the selected frames: frames as sections, cards stacked in reading order
+    if (whole || selFrames.length) {
+      const cards = visible.filter(isCard).filter((n) => !locked.has(n.id) && inside(n));
+      blocks = visible.filter(isFrame).filter((f) => f.data.collapsed && !locked.has(f.id) && inside(f));
+      // collapsed frames take part as fixed-size blocks; their hidden members travel with them
+      const pseudo: CardNodeT[] = blocks.map((f) => ({ id: f.id, type: "card", position: f.position, data: { title: f.data.title, bullets: "", kind: "note" } }));
+      for (const f of blocks) fixedH.set(f.id, COLLAPSED.h);
+      const frames = visible.filter(isFrame).filter((f) => !f.data.collapsed && !locked.has(f.id) && inside(f));
+      const target = [...cards, ...pseudo];
+      if (target.length >= 2 || frames.length) {
+        const r = organize(target, frames, edges, fixedH);
+        r.cardPos.forEach((v, k) => cardPos.set(k, v));
+        r.framePos.forEach((v, k) => framePos.set(k, v));
+      }
+    }
+    // selected cards (outside selected frames): packed with the other selected cards of their own frame, where they are
+    const groups = new Map<string, CardNodeT[]>();
+    for (const c of sel.filter(isCard)) {
+      if (inScope.has(c.id) || locked.has(c.id)) continue;
+      const k = pm.get(c.id) ?? "";
+      groups.set(k, [...(groups.get(k) ?? []), c]);
+    }
+    for (const g of groups.values()) if (g.length >= 2) organize(g, [], edges).cardPos.forEach((v, k) => cardPos.set(k, v));
+
+    if (!cardPos.size && !framePos.size) {
+      if (!second) set({ note: whole ? (locked.size ? "Nothing to pack: everything else is pinned." : "Nothing to pack.") : leftCards || leftFrames ? "Nothing to pack: what you selected is pinned or holds a pinned card." : "Pack needs 2 or more cards, or a frame, selected (or nothing selected, for the whole board)." });
       return;
     }
-    const frames = partial ? [] : visible.filter(isFrame).filter((f) => !f.data.collapsed && !locked.has(f.id) && (!framed || inScope.has(f.id)));
-    const fixedH = new Map(blocks.map((f) => [f.id, COLLAPSED.h]));
-    const { cardPos, framePos } = organize(target, frames, flowEdges(aggregateEdges(board.nodes, board.edges)), fixedH);
 
-    // dodge pinned / locked things: slide the organized block to the nearest free spot
-    const obstacles = visible.filter((n) => locked.has(n.id)).map(boxRect);
+    // the whole board: dodge pinned / locked things by sliding the packed block to the nearest free spot
+    const obstacles = whole ? visible.filter((n) => locked.has(n.id)).map(boxRect) : [];
     if (obstacles.length) {
       const placed: { x: number; y: number; w: number; h: number }[] = [];
-      for (const n of target) {
-        const p = cardPos.get(n.id)!;
-        placed.push({ x: p.x, y: p.y, w: cardW(n), h: fixedH.get(n.id) ?? fullH.get(n.id) ?? estHeight(n) });
+      for (const n of visible) {
+        const p = cardPos.get(n.id);
+        if (p) placed.push({ x: p.x, y: p.y, w: isCard(n) ? cardW(n) : COLLAPSED.w, h: fixedH.get(n.id) ?? fullH.get(n.id) ?? (isCard(n) ? estHeight(n) : COLLAPSED.h) });
       }
       for (const [, f] of framePos) placed.push({ x: f.x, y: f.y, w: f.width, h: f.height });
       const M = 40;
@@ -929,10 +940,11 @@ export const useStore = create<State>()((set, get) => ({
       if (!np) continue;
       for (const m of f.data.members ?? []) shift.set(m, { dx: np.x - f.position.x, dy: np.y - f.position.y });
     }
+    const left = [leftCards ? `${leftCards} pinned card${leftCards > 1 ? "s" : ""}` : "", leftFrames ? `${leftFrames} frame${leftFrames > 1 ? "s" : ""} holding a pinned card` : ""].filter(Boolean).join(" and ");
     set((s) => ({
       animating: true,
-      note: second ? s.note : locked.size ? `${[...locked].filter((id) => isCard(board.nodes.find((n) => n.id === id)!)).length} pinned/locked card(s) stayed in place.` : null,
-      fitTick: partial || framed || second ? s.fitTick : s.fitTick + 1,
+      note: second ? s.note : left ? `${left} stayed as ${leftCards + leftFrames > 1 ? "they were" : "it was"}.` : null,
+      fitTick: !whole || second ? s.fitTick : s.fitTick + 1,
       board: {
         ...s.board,
         nodes: s.board.nodes.map((n) => {
@@ -945,12 +957,12 @@ export const useStore = create<State>()((set, get) => ({
         }),
       },
     }));
-    // card heights/widths settle after the first pass renders; lay out once more with the real sizes
-    if (!second) { const keep = selFrames.map((f) => f.id); setTimeout(() => get().compactLayout(true, keep.length ? keep : undefined), 400); }
-    else if (framed) setTimeout(() => get().organizeLayout(), 300); // a compacted frame changed size: clear any overlap it made
+    // card heights/widths settle after the first pass renders; lay out once more with the real sizes (same scope)
+    if (!second) setTimeout(() => get().compactLayout(true, ids), 400);
+    else if (!whole) setTimeout(() => get().organizeLayout("space", true, ids), 300); // packed things make room among the rest
     else if (lockedFrames.size) {
       // frames holding a pinned card stayed put; still fit them around what is inside
-      const fit = fitFrames(get().board.nodes.filter((n) => !hidden.has(n.id)), lockedFrames, fixedH);
+      const fit = fitFrames(get().board.nodes.filter((n) => !hidden.has(n.id)), lockedFrames, new Map(blocks.map((f) => [f.id, COLLAPSED.h])));
       if (fit.size) set((s) => ({ board: { ...s.board, nodes: s.board.nodes.map((n) => { const f = fit.get(n.id); return f ? ({ ...n, position: { x: f.x, y: f.y }, width: f.width, height: f.height } as AppNode) : n; }) } }));
     }
     setTimeout(() => set({ animating: false }), 600);
@@ -1036,18 +1048,21 @@ export const useStore = create<State>()((set, get) => ({
   setAskAction: (a) => set({ askAction: a, askOpen: true }),
   async runAction(a, text) {
     const t = text.trim();
-    const sel = get().board.nodes.filter((n) => n.selected && isCard(n));
     if (a === "ask") return get().ask(t);
     if (a === "dump") return t ? get().ask(`Turn this text into cards:\n"""\n${t}\n"""`, { mode: "dump", text: t, detail: get().importDetail, label: "From text: " + t.slice(0, 60).replace(/\s+/g, " ") + (t.length > 60 ? "…" : "") }) : undefined;
     if (a === "arrange") {
       const pick = arrangeTargets(get().board);
-      if (pick.cards.length < 3) return void set({ error: "Arrange needs at least 3 cards (pinned cards and cards in collapsed frames stay out)." });
+      const pinNote = pick.pinned ? ` (${pick.pinned} pinned card${pick.pinned > 1 ? "s" : ""} left out)` : "";
+      if (pick.cards.length < 3) return void set({ error: pick.partial ? `Arrange needs at least 3 cards: ${pick.cards.length} selected${pinNote}. Select more, or nothing for the whole board.` : `Arrange needs at least 3 cards${pinNote}.` });
+      if (pick.pinned) set({ note: `${pick.pinned} pinned card${pick.pinned > 1 ? "s" : ""} stay where ${pick.pinned > 1 ? "they are" : "it is"}.` });
       const what = pick.partial ? `${pick.cards.length} selected cards` : "the board";
       return get().ask(`Arrange ${what} into sections in reading order.${t ? " Guidance: " + t : ""}`, { mode: "arrange", label: `Arrange ${what}${t ? " — " + (t.length > 60 ? t.slice(0, 59) + "…" : t) : ""}`, arrange: { cards: pick.cards.map((c) => ({ id: c.id, title: c.data.title, bullets: c.data.bullets, kind: c.data.kind, frame: pick.frameOf.get(c.id) ?? "" })), frames: pick.frameTitles, guidance: t } });
     }
     if (a === "condense") {
       const pick = condenseTargets(get().board);
-      if (pick.cards.length < 2) return void set({ error: "Condense needs at least 2 cards (select cards or a frame, or none for the whole board)." });
+      const pinNote = pick.pinned ? ` (${pick.pinned} pinned card${pick.pinned > 1 ? "s" : ""} left out)` : "";
+      if (pick.cards.length < 2) return void set({ error: pick.partial ? `Condense needs at least 2 cards: ${pick.cards.length} selected${pinNote}. Select more, or nothing for the whole board.` : `Condense needs at least 2 cards${pinNote}.` });
+      if (pick.pinned) set({ note: `${pick.pinned} pinned card${pick.pinned > 1 ? "s" : ""} left out.` });
       const what = pick.scope;
       return get().ask(`Condense ${what} into fewer, denser cards.${t ? " Guidance: " + t : ""}`, { mode: "condense", label: `Condense ${what}${t ? " — " + (t.length > 60 ? t.slice(0, 59) + "…" : t) : ""}`, arrange: { cards: pick.cards.map((c) => ({ id: c.id, title: c.data.title, bullets: c.data.bullets, kind: c.data.kind, frame: pick.frameOf.get(c.id) ?? "" })), guidance: t } });
     }
@@ -1064,7 +1079,7 @@ export const useStore = create<State>()((set, get) => ({
       if (!targets.length) return void set({ error: "Select one or more cards (or a group frame) to rewrite." });
       return get().ask(t ? `Rewrite the selected cards: ${t}` : "Rewrite the selected cards for clarity and concision.", { mode: "rewrite", guided: !!t, label: `Rewrite ${targets.length} card${targets.length > 1 ? "s" : ""}${t ? " — " + (t.length > 70 ? t.slice(0, 69) + "…" : t) : ""}`, selectedIds: targets.map((x) => x.id) });
     }
-    if (a === "expand" && !sel.length) return void set({ error: "Select one or more cards first, then use Expand." });
+    if (a === "expand" && !rewriteTargets(get().board).length) return void set({ error: "Select one or more cards (or a frame) first, then use Expand." });
     const base: Record<string, [string, string]> = {
       expand: ["Expand the selected cards", "Expand the selected cards with child cards."],
       risks: ["Find risks", "What could go wrong here? Add risk cards."],
@@ -1185,7 +1200,7 @@ export const useStore = create<State>()((set, get) => ({
     const mode = opts.mode ?? "ask";
     const cards = board.nodes.filter(isCard).filter((n) => !n.data.ghost);
     const groups = board.nodes.filter(isFrame).map((f) => ({ id: f.id, title: f.data.title, members: membersOf(f, cards).map((c) => c.id) }));
-    const selectedIds = opts.selectedIds ?? board.nodes.filter((n) => n.selected && isCard(n)).map((n) => n.id);
+    const selectedIds = opts.selectedIds ?? rewriteTargets(board).map((n) => n.id); // selected cards + the cards inside selected frames
     const boardId = board.id;
     const label = opts.label ?? question;
     const save = (log: AskEntry[]) => { try { window.api.chats.save(boardId, "ask", log); } catch { /* ignore */ } };
@@ -1261,21 +1276,18 @@ export const useStore = create<State>()((set, get) => ({
   },
 }));
 
-/** Cards Condense works on: selected cards (2+), else cards inside selected frames, else every visible card. Pinned, ghost and collapsed-away cards stay out. */
+/** Cards Condense works on: the selection (selected cards, and the cards inside selected frames), else every visible card.
+ *  Pinned, ghost and collapsed-away cards stay out (`pinned` counts the ones left out). */
 function condenseTargets(board: Board) {
   const { hidden } = collapsedOwners(board.nodes);
   const visible = board.nodes.filter((n) => !hidden.has(n.id));
-  const ok = (c: CardNodeT) => !c.data.ghost && !c.data.pinned && !c.data.proposal;
-  const all = visible.filter(isCard).filter(ok);
-  const selCards = all.filter((c) => c.selected);
+  const sel = new Set(rewriteTargets(board).map((c) => c.id));
+  const partial = sel.size > 0;
+  const pool = visible.filter(isCard).filter((c) => !c.data.ghost && !c.data.proposal && (!partial || sel.has(c.id)));
+  const pinned = pool.filter((c) => c.data.pinned).length;
+  const cardsIn = pool.filter((c) => !c.data.pinned);
   const selFrames = visible.filter(isFrame).filter((n) => n.selected);
-  let cardsIn = all, scope = "the board";
-  if (selCards.length >= 2) { cardsIn = selCards; scope = `${selCards.length} selected cards`; }
-  else if (selFrames.length) {
-    const inside = new Set(selFrames.flatMap((f) => descendants(f, visible).map((d) => d.id)));
-    cardsIn = all.filter((c) => inside.has(c.id));
-    scope = selFrames.length === 1 ? `"${(selFrames[0] as FrameNodeT).data.title || "frame"}"` : `${selFrames.length} frames`;
-  }
+  const scope = !partial ? "the board" : !visible.some((n) => n.selected && isCard(n)) && selFrames.length === 1 ? `"${(selFrames[0] as FrameNodeT).data.title || "frame"}"` : `${cardsIn.length} selected cards`;
   const pm = parentMap(visible);
   const byId = new Map(visible.map((n) => [n.id, n]));
   const order = readingOrder(cardsIn.map((c) => ({ id: c.id, ...boxRect(c) })));
@@ -1283,19 +1295,21 @@ function condenseTargets(board: Board) {
   const cards = order.map((id) => cmap.get(id)!);
   const frameOf = new Map<string, string>();
   for (const c of cards) { const f = pm.get(c.id); if (f) frameOf.set(c.id, `${(byId.get(f) as FrameNodeT).data.title || "Untitled frame"}#${f.slice(-4)}`); }
-  return { cards, scope, frameOf };
+  return { cards, scope, frameOf, partial, pinned };
 }
 
-/** Cards Arrange works on: the selection (3+ cards) or every visible card; pinned cards stay where they are. */
+/** Cards Arrange works on: the selection (selected cards, and the cards inside selected frames), else every visible card;
+ *  pinned cards stay where they are (`pinned` counts the ones left out). */
 function arrangeTargets(board: Board) {
   const { hidden } = collapsedOwners(board.nodes);
   const visible = board.nodes.filter((n) => !hidden.has(n.id));
-  const all = visible.filter(isCard).filter((c) => !c.data.ghost && !c.data.pinned);
-  const sel = all.filter((c) => c.selected);
-  const partial = sel.length >= 3;
+  const picked = new Set(rewriteTargets(board).map((c) => c.id));
+  const partial = picked.size > 0;
+  const pool = visible.filter(isCard).filter((c) => !c.data.ghost && (!partial || picked.has(c.id)));
+  const pinned = pool.filter((c) => c.data.pinned).length;
+  const cardsIn = pool.filter((c) => !c.data.pinned);
   const pm = parentMap(visible);
   const byId = new Map(visible.map((n) => [n.id, n]));
-  const cardsIn = partial ? sel : all;
   const order = readingOrder(cardsIn.map((c) => ({ id: c.id, ...boxRect(c) })));
   const cmap = new Map(cardsIn.map((c) => [c.id, c]));
   const cards = order.map((id) => cmap.get(id)!);
@@ -1303,7 +1317,47 @@ function arrangeTargets(board: Board) {
   for (const c of cards) { const f = pm.get(c.id); if (f) frameOf.set(c.id, (byId.get(f) as FrameNodeT).data.title || "Untitled frame"); }
   // every open frame, so guidance like "put them in the Integration frame" can name one
   const frameTitles = [...new Set(visible.filter(isFrame).filter((f) => !f.data.collapsed).map((f) => f.data.title || "Untitled frame"))];
-  return { cards, partial, frameOf, frameTitles };
+  return { cards, partial, frameOf, frameTitles, pinned };
+}
+
+/**
+ * What a layout tool works on, the same rule for every tool: `only` if given ([] = the whole board), else the
+ * selection (selected cards and frames, and everything inside selected frames), else the whole board.
+ *  - fixed: never moved: pinned cards, the frames around a pinned card (their other contents are still tidied),
+ *    and, with a selection, everything outside it (the selected things make room around them).
+ *  - fitOnly: with a selection, only the frames it touches are refitted around their cards.
+ *  - pinned: how many pinned cards the tool had to leave in place (for the note).
+ */
+function layoutScope(visible: AppNode[], only?: string[]) {
+  const pm = parentMap(visible);
+  const byId = new Map(visible.map((n) => [n.id, n]));
+  const ids = only ?? visible.filter((n) => n.selected).map((n) => n.id);
+  const scope = new Set<string>();
+  for (const id of ids) {
+    const n = byId.get(id);
+    if (!n) continue;
+    scope.add(id);
+    if (isFrame(n) && !n.data.collapsed) for (const d of descendants(n, visible)) scope.add(d.id);
+  }
+  const whole = scope.size === 0;
+  const fixed = new Set<string>();
+  let pinned = 0;
+  for (const n of visible) {
+    if (!(isCard(n) && n.data.pinned)) continue;
+    if (whole || scope.has(n.id)) pinned++;
+    fixed.add(n.id);
+    for (let p = pm.get(n.id); p; p = pm.get(p)) fixed.add(p);
+  }
+  let fitOnly: Set<string> | undefined;
+  if (!whole) {
+    fitOnly = new Set<string>();
+    for (const id of scope) {
+      if (isFrame(byId.get(id)!)) fitOnly.add(id);
+      for (let p = pm.get(id); p; p = pm.get(p)) fitOnly.add(p);
+    }
+    for (const n of visible) if (!scope.has(n.id)) fixed.add(n.id);
+  }
+  return { whole, scope, fixed, fitOnly, pinned };
 }
 
 /** Lay out just these nodes (cards + frames) with organize(), keeping their block's top-left corner. */
@@ -1368,7 +1422,7 @@ function applyStructure(st: StructureResult, r: NonNullable<typeof run>, set: (p
     const now = Date.now();
     set((s2) => ({ aiTouched: { ...s2.aiTouched, ...Object.fromEntries(fresh.map((n) => [n.id, now])) } }));
     // merged cards are taller: clear overlaps and refit frames once real heights are known
-    setTimeout(() => get().organizeLayout(), 400);
+    setTimeout(() => get().organizeLayout(undefined, false, []), 400);
     return;
   }
   if (st.kind === "import") {
@@ -1502,7 +1556,7 @@ function applyStructure(st: StructureResult, r: NonNullable<typeof run>, set: (p
     newFrames.forEach((f) => ids.add(f.id));
     blockCards.forEach((c) => ids.add(c.id));
     // real heights are known after render: fit frames and clear overlaps with whatever stayed put
-    setTimeout(() => get().organizeLayout("space", true), 1400);
+    setTimeout(() => get().organizeLayout("space", true, []), 1400);
     r.counts.grouped += st.sections.length;
     r.counts.edited += st.renames.length;
     r.notes.push(`arranged ${cards.length} cards into sections ${st.sections.map((q) => `"${q.title}" (${q.ids.length})`).join(", ")}`);
@@ -1541,7 +1595,7 @@ function applyGroups(groups: { title: string; members: string[] }[], set: (p: Pa
     }
     return { board: { ...st.board, nodes: [...frames, ...nodes.map((n) => (moved.has(n.id) ? { ...n, position: moved.get(n.id)! } : n))] } };
   });
-  setTimeout(() => get().organizeLayout("space", true), 150);
+  setTimeout(() => get().organizeLayout("space", true, []), 150);
 }
 
 function applyOps(ops: GraphOps, set: (p: Partial<State> | ((s: State) => Partial<State>)) => void, get: () => State, o: { refs?: Map<string, string>; ghost?: boolean } = {}): string[] {

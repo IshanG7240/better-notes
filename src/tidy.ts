@@ -27,7 +27,7 @@ const fitTo = (n: AppNode | undefined, cur: R, rs: R[]): R => {
  *  - frames shrink or grow to fit what is inside them.
  * Nothing is packed into rows or columns. Works inside-out: the deepest frames first.
  */
-export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, fixedH: Map<string, number> = new Map()) {
+export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, fixedH: Map<string, number> = new Map(), fitOnly?: Set<string>) {
   const pm = parentMap(nodes);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const rect = new Map<string, R>();
@@ -64,8 +64,7 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
     const items = kids.get(c) ?? [];
     if (!items.length) continue;
     const root = c === "";
-    // a frame holding a pinned card keeps its contents where they are, but still fits around them
-    if (c && locked.has(c)) { rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!))); continue; }
+    // a frame holding a pinned card stays where it is, but the rest of its contents is tidied like anywhere else
 
     // 1) flow: link clusters among the loose cards of this container
     const cardItems = new Set(items.filter((id) => solid(id) && !locked.has(id)));
@@ -180,8 +179,8 @@ export function tidy(nodes: AppNode[], edges: NoteEdge[], locked: Set<string>, f
       placed.push(...unit);
     }
 
-    // 3) a frame wraps what is inside it
-    if (!root) rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!)));
+    // 3) a frame wraps what is inside it (with a selection: only the frames the selection touches)
+    if (!root && (!fitOnly || fitOnly.has(c))) rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!)));
   }
 
   const pos = new Map<string, { x: number; y: number }>();
@@ -256,7 +255,7 @@ const GAP_IN = 36;
  * (pinned things don't move; the other side takes the whole push). Frames move as a block with
  * everything inside them, and fit snugly around their contents. Works inside-out.
  */
-export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<string, number> = new Map(), opt: { touch?: Iterable<string>; growOnly?: boolean } = {}) {
+export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<string, number> = new Map(), opt: { touch?: Iterable<string>; growOnly?: boolean; fitOnly?: Set<string> } = {}) {
   // scoped ("make room"): only pairs involving the touched things (and whatever they push) are separated, the touched
   // things hold their spot, and frames only grow. Used after a drop and after the assistant adds cards.
   const scoped = !!opt.touch;
@@ -367,8 +366,9 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
       }
       placed.push(id);
     }
-    // 3) the frame fits snugly around what is inside it (grows or shrinks; the contents don't move)
-    if (c) rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!)));
+    // 3) the frame fits snugly around what is inside it (grows or shrinks; the contents don't move). With a selection:
+    //    only the frames the selection touches
+    if (c && (!opt.fitOnly || opt.fitOnly.has(c))) rect.set(c, fitTo(byId.get(c), rect.get(c)!, items.map((id) => rect.get(id)!)));
   }
 
   const pos = new Map<string, { x: number; y: number }>();
