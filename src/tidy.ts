@@ -241,6 +241,9 @@ function treeLay(comp: string[], ce: [string, string][], rect: Map<string, R>, d
 /** Gap kept around things: on the open board, and between things inside a frame. Same as tidy() so the two agree. */
 const GAP_ROOT = 56;
 const GAP_IN = 36;
+/** Space out, on the open board: the gap next to a frame (frames are sections and need room to breathe, and for the
+ *  lines running between them). Two loose cards keep GAP_ROOT. */
+const GAP_FRAME = 150;
 /** on the open board, things further apart than this are separate areas: evening out leaves that gap alone */
 const SEPARATE = 1200;
 
@@ -248,7 +251,7 @@ const SEPARATE = 1200;
  * Even gaps that keep the shape. Each thing is compared with the things it faces: side by side (their heights
  * overlap) or one above the other (their widths overlap). "Overlap" is counted with the gap as slack, so two
  * things whose corners come closer than the gap also face each other, and frames, cards and diagonal pairs are all
- * treated alike. Each facing pair is set exactly `M` apart (closer ones pushed apart, further ones pulled together),
+ * treated alike. Each facing pair is set exactly its gap apart (closer ones pushed apart, further ones pulled together),
  * left to right, then top to bottom, repeated until nothing moves:
  *  - a thing moves only along the line it faces its neighbour on; everything keeps its order and its offset
  *    sideways, so zig-zags and staggered columns stay;
@@ -257,7 +260,7 @@ const SEPARATE = 1200;
  *    together instead of being stretched;
  *  - pinned / out-of-scope things never move; the others line up against them.
  */
-function evenGaps(items: string[], rect: Map<string, R>, M: number, far: number, fixed: (id: string) => boolean, move: (id: string, dx: number, dy: number) => void) {
+function evenGaps(items: string[], rect: Map<string, R>, gapOf: (a: string, b: string) => number, far: number, fixed: (id: string) => boolean, move: (id: string, dx: number, dy: number) => void) {
   const pass = (ax: "x" | "y") => {
     const o = ax === "x" ? "y" : "x", W = ax === "x" ? "w" : "h", OW = ax === "x" ? "h" : "w";
     const sep = (a: R, b: R, k: "x" | "y", K: "w" | "h") => Math.max(b[k] - (a[k] + a[K]), a[k] - (b[k] + b[K]));
@@ -266,7 +269,7 @@ function evenGaps(items: string[], rect: Map<string, R>, M: number, far: number,
     for (const id of items) { preds.set(id, []); opreds.set(id, []); }
     for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
       let a = items[i], b = items[j];
-      const ra = rect.get(a)!, rb = rect.get(b)!;
+      const ra = rect.get(a)!, rb = rect.get(b)!, M = gapOf(a, b);
       const sa = sep(ra, rb, ax, W), so = sep(ra, rb, o, OW);
       if (sa >= M && so >= M) continue; // diagonal, with room at the corners: neither line
       // they face each other along the axis they are further apart on (ties: side by side)
@@ -301,7 +304,7 @@ function evenGaps(items: string[], rect: Map<string, R>, M: number, far: number,
       let d = 0;
       if (!fixed(id)) {
         const ps = preds.get(id)!;
-        if (ps.length) d = Math.max(...ps.map((p) => end(p, ax, W) + M)) - rect.get(id)![ax];
+        if (ps.length) d = Math.max(...ps.map((p) => end(p, ax, W) + gapOf(p, id))) - rect.get(id)![ax];
         else { const l = lead.get(id); d = l ? shift.get(l) ?? 0 : 0; }
       }
       if (Math.abs(d) < 0.5) d = 0;
@@ -390,7 +393,10 @@ export function spaceOut(nodes: AppNode[], locked: Set<string>, fixedH: Map<stri
     });
     // 1) "Space out" pressed: every gap evened out (see evenGaps). Otherwise: only crowded pairs are nudged apart,
     //    a little at a time, until nobody is crowded
-    if (opt.even && !scoped) evenGaps(items, rect, M, c === "" ? SEPARATE : Infinity, fixed, move);
+    if (opt.even && !scoped) {
+      const gapOf = (a: string, b: string) => (c === "" && (isFr(a) || isFr(b)) ? GAP_FRAME : M);
+      evenGaps(items, rect, gapOf, c === "" ? SEPARATE : Infinity, fixed, move);
+    }
     for (let iter = 0; iter < 300; iter++) {
       let crowded = false;
       for (let i = 0; i < items.length; i++) {
